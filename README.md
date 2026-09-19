@@ -1,5 +1,7 @@
 # Hideout
 
+**https://hideout.meshtool.ai** — the website (source in `site/`: static files, no cookies, no tracking).
+
 Finds where malware hides on a Windows PC. **Double-click `Hideout.cmd`**: it scans,
 writes one report page, and opens it. It only looks. It never deletes, moves,
 disables, runs or uploads anything.

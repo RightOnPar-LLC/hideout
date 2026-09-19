@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hideout — see what's hiding on your PC, and follow the money after a scam</title>
+<meta name="description" content="Hideout finds malware that antivirus can miss, and walks you through a scam: what's still charging you, what to tell your bank, and the letters to send. It only looks. It never logs in, cancels or sends anything for you.">
+<meta property="og:title" content="Hideout — see what's hiding. Follow the money.">
+<meta property="og:description" content="Finds malware antivirus can miss, and helps you get through a scam: what's still charging you and what to tell your bank.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hideout.meshtool.ai/">
+<meta name="theme-color" content="#050908">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="mark" href="/" aria-label="Hideout home">HIDEOUT<span class="cur" aria-hidden="true">_</span></a>
+  <nav aria-label="Sections">
+    <a href="#pc">Your PC</a><a href="#money">Money</a><a href="#guide">The guide</a><a href="#promises">Promises</a>
+    <a class="gh" href="https://github.com/RightOnPar-LLC/hideout">GitHub</a>
+  </nav>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="copy">
+      <p class="kicker">// for Windows</p>
+      <h1>See what's hiding.<br><span class="phos">Follow the money.</span></h1>
+      <p class="lede">Hideout finds malware that antivirus can miss. If you've been scammed, it shows what's still charging you, what to tell your bank, and writes the letters for you to send.</p>
+      <div class="ctas">
+        <a class="btn primary" href="https://github.com/RightOnPar-LLC/hideout">See the code on GitHub</a>
+        <span class="btn ghost" aria-disabled="true">Windows download — coming soon</span>
+      </div>
+      <p class="fine">The download arrives once the app is code-signed, so Windows can check who made it.</p>
+    </div>
+    <div class="radar" aria-hidden="true"><div class="sweep"></div><div class="blip b1"></div><div class="blip b2"></div><div class="dot">1</div></div>
+  </section>
+
+  <section class="story" aria-labelledby="story-h">
+    <h2 id="story-h">Why it exists</h2>
+    <p>For months, on a real PC with its antivirus switched on and up to date, a program sat set to start at every sign-in. It was signed by a real software company, so it looked safe. Next to it were planted files: one changed after signing, three unsigned, and hidden payloads dressed up as sound files. Nothing flagged it. <strong>Hideout did, on its first scan</strong> — and flagged nothing else among 465 things set to start by themselves.</p>
+  </section>
+
+  <section class="tabs-wrap" aria-label="What Hideout shows">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="t-pc" aria-controls="p-pc" aria-selected="true">Your PC</button>
+      <button role="tab" id="t-money" aria-controls="p-money" aria-selected="false">Money</button>
+      <button role="tab" id="t-guide" aria-controls="p-guide" aria-selected="false">The guide</button>
+    </div>
+
+    <div class="panel" id="p-pc" role="tabpanel" aria-labelledby="t-pc">
+      <div class="shot">
+        <div class="verdict"><div class="mini-radar high"><span>1</span></div><div><h3>1 threat found</h3><p>Something set to start by itself matches how malware hides.</p></div></div>
+        <div class="card high">
+          <div class="bar"></div>
+          <div class="body">
+            <div class="row"><span class="prog">VendorUpdate.exe</span><span class="sev">Threat</span></div>
+            <div class="where">Scheduled task · runs at every sign-in · arrived 4 months ago</div>
+            <div class="chips"><span class="chip">Tampered file</span><span class="chip">Unsigned files beside a signed program</span><span class="chip">Maker has nothing installed here</span><span class="chip">Machine-made folder name</span><span class="chip">Hidden payload files</span></div>
+            <div class="path">C:\ProgramData\kLmQzRtPx8\VendorUpdate.exe</div>
+          </div>
+        </div>
+      </div>
+      <div class="explain" id="pc">
+        <h2>Your PC</h2>
+        <ul>
+          <li><strong>Quick scan</strong> — everything set to start by itself, checked for the trick malware uses most: a trusted, signed program with planted files beside it.</li>
+          <li><strong>Deep check</strong> — 16 areas: tasks, services, drivers, security settings, network connections, browser extensions and more.</li>
+          <li><strong>Only looks.</strong> It never deletes, moves, disables or uploads anything. Clean-up goes through Windows Security, step by step.</li>
+          <li><strong>Not checked is never shown as clean.</strong> If something can't be checked, Hideout says so.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="panel" id="p-money" role="tabpanel" aria-labelledby="t-money" hidden>
+      <div class="shot">
+        <div class="verdict"><div class="mini-radar high"><span>1</span></div><div><h3>1 company still charging you</h3><p>They charged again after you cancelled — the strongest case for getting money back.</p></div></div>
+        <div class="money-row bad"><div><b>Netflix</b><span>$17.99 every month</span></div><em>STILL CHARGING</em><small>Cancelled Aug 5 · charged again Sep 1 · dispute by about Oct 31</small></div>
+        <div class="money-row"><div><b>Adobe Creative Cloud</b><span>$59.99 every month</span></div><em class="warn">price up $54.99 → $59.99</em><small>Refund: decent odds</small></div>
+        <div class="money-row"><div><b>Tech Support Solutions</b><span>$299.99 every month</span></div><em class="warn">new since the scam</em><small>Started the day after the call</small></div>
+        <div class="money-row sent"><div><b>Zelle payment</b><span>$1,500.00 · Aug 14</span></div><em class="bad">money sent</em><small>If it went to a scammer, call your bank now — the number on your card</small></div>
+      </div>
+      <div class="explain" id="money">
+        <h2>Money</h2>
+        <ul>
+          <li><strong>Import a statement</strong> you download from your bank's website. It stays on your PC.</li>
+          <li><strong>Every repeating charge</strong>, how much it costs a month, and when the price went up.</li>
+          <li><strong>Still charging after you cancelled?</strong> Hideout flags it with the dates — and a date to tell your bank by.</li>
+          <li><strong>Since the scam:</strong> every transfer and every new company that took money since the day it happened.</li>
+          <li><strong>Honest refund odds</strong> for 46 common companies, taken from their own policies. When nobody knows, it says so.</li>
+          <li><strong>How to cancel</strong> — the company's own steps, the traps named in advance ("pause" still bills you), and a button to the company's real cancel page.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="panel" id="p-guide" role="tabpanel" aria-labelledby="t-guide" hidden>
+      <div class="shot chat">
+        <div class="msg you">A man called me about a virus and I let him on my computer. I sent him money with Zelle. Can you check my bank charges?</div>
+        <div class="msg bot"><span class="note">• Money: things went wrong on Aug 14</span>I'm sorry this happened — these callers are very convincing, and it's not your fault. Since Aug 14: a $1,500 Zelle payment, a $49 remote-access program, and $299.99 a month to "Tech Support Solutions".<br><br><b>Do this first:</b> call your bank using the number printed on your card. Say it was a scam. Zelle moves fast, so speed matters.</div>
+        <div class="letter">
+          <h4>Letter to your bank — Netflix</h4>
+          <p>I cancelled my Netflix subscription on 5 August 2026. The charge of $17.99 on 1 September 2026 was taken after my cancellation.</p>
+          <p class="bracket">[Confirm: I have not used the service since cancelling]</p>
+          <p>Please reverse this charge and block further charges from this merchant.<br>[Your name] · [Last 4 digits of card]</p>
+          <div class="lbtns"><span>Copy letter</span><span>Open in my email</span></div>
+        </div>
+      </div>
+      <div class="explain" id="guide">
+        <h2>The guide</h2>
+        <ul>
+          <li><strong>An AI assistant, powered by Claude</strong>, that walks you through what to do, one step at a time, in plain words. It says it's an AI, and it can be wrong.</li>
+          <li><strong>It remembers where you left off</strong> — which steps are done, what you cancelled and when.</li>
+          <li><strong>Writes the letters</strong>: refund requests, cancellations, bank disputes. Anything it can't know from you goes in [brackets] for you to confirm or delete.</li>
+          <li><strong>You send them.</strong> Hideout never logs into your accounts, never cancels anything and never sends email for you.</li>
+          <li><strong>Warns about the second scam</strong>: anyone offering to "recover" your money for a fee or remote access.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="promises" id="promises" aria-labelledby="prom-h">
+    <h2 id="prom-h">What Hideout promises</h2>
+    <div class="grid">
+      <div class="p"><h3>It only looks</h3><p>No deleting, moving, disabling or uploading. It can't change your PC, and neither can the guide.</p></div>
+      <div class="p"><h3>Hands off your accounts</h3><p>It never asks for passwords, never logs in anywhere, never cancels or sends anything for you.</p></div>
+      <div class="p"><h3>Memory locked to your PC</h3><p>Your case file and statements are stored encrypted, with a key sealed by your PC's security chip. Nothing is uploaded to be stored.</p></div>
+      <div class="p"><h3>The guide sees less than you do</h3><p>When you ask the guide, it gets a summary with your name, account numbers and PC name removed — and nothing else from your PC.</p></div>
+      <div class="p"><h3>One door out</h3><p>The app can reach exactly one address on the internet: the guide's service. Everything else is refused.</p></div>
+      <div class="p"><h3>Open to check</h3><p>The code is public. Anyone can read what it does — and what it doesn't.</p></div>
+    </div>
+    <p class="fine center">Refund odds and "tell your bank by" dates are general information, not legal or financial advice. Your bank's own terms decide. Hideout isn't affiliated with any bank or company it lists.</p>
+  </section>
+</main>
+
+<footer>
+  <span class="mark small">HIDEOUT<span class="cur" aria-hidden="true">_</span></span>
+  <span>Never share passwords or codes with anyone who contacts you.</span>
+  <a href="https://github.com/RightOnPar-LLC/hideout">Source on GitHub</a>
+</footer>
+<script src="/site.js" defer></script>
+</body>
+</html>
