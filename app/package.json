@@ -1,0 +1,18 @@
+{
+  "name": "hideout-app",
+  "version": "0.1.0",
+  "description": "Hideout desktop app: finds where malware hides, with a background scan worker and an AI guide that walks people through a malware incident.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node tests/selftest.mjs && node tests/money.selftest.mjs",
+    "build-exe": "powershell -NoProfile -ExecutionPolicy Bypass -File build-exe.ps1"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0"
+  }
+}

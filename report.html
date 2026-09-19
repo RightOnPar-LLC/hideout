@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<title>Hideout report</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #14171c; --muted: #5f6773; --line: #e3e6eb;
+    --red: #d62f3a; --red-soft: #fde8ea; --amber: #b86e00; --amber-soft: #fff3dc;
+    --green: #16864a; --green-soft: #e3f6ec; --chip: #eef0f3; --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --card: #171b21; --ink: #e9edf2; --muted: #98a2ae; --line: #262c35;
+      --red: #ff5c67; --red-soft: #3a1519; --amber: #ffb547; --amber-soft: #3a2a0f;
+      --green: #3fcf82; --green-soft: #10301f; --chip: #222831;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  header b { color: var(--ink); font-size: 15px; letter-spacing: .02em; }
+  .verdict { display: flex; align-items: center; gap: 18px; margin: 18px 0 16px; padding: 22px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); }
+  .dot { flex: none; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; font-weight: 700; color: #fff; }
+  .verdict h1 { margin: 0; font-size: 26px; line-height: 1.15; }
+  .verdict p { margin: 4px 0 0; color: var(--muted); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 22px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .tile .n { font-size: 22px; font-weight: 700; }
+  .tile .l { color: var(--muted); font-size: 13px; }
+  .tile.warn .n { color: var(--amber); } .tile.bad .n { color: var(--red); } .tile.ok .n { color: var(--green); }
+  .card { display: flex; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+  .bar { flex: none; width: 8px; }
+  .body { padding: 14px 16px; min-width: 0; flex: 1; }
+  .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+  .prog { font-size: 18px; font-weight: 700; word-break: break-all; }
+  .sev { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 999px; }
+  .where { color: var(--muted); font-size: 13px; margin: 2px 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+  .path { font-family: var(--mono); font-size: 12.5px; color: var(--muted); word-break: break-all; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  details ul, details ol { margin: 8px 0 0; padding-left: 20px; }
+  details li { margin: 3px 0; }
+  .clean { text-align: center; padding: 28px 16px; color: var(--muted); }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center; }
+  .note { background: var(--amber-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 16px; }
+  /* Severity is a class, never an inline colour, so it follows light/dark live. */
+  .dot.high, .bar.high { background: var(--red); }
+  .dot.medium, .dot.low, .dot.unsure, .bar.medium, .bar.low { background: var(--amber); }
+  .dot.clean { background: var(--green); } .dot.none { background: var(--muted); }
+  .sev.high { background: var(--red-soft); color: var(--red); }
+  .sev.medium, .sev.low { background: var(--amber-soft); color: var(--amber); }
+</style>
+</head>
+<body>
+<main>
+  <header><b>Hideout</b><span id="meta"></span></header>
+  <section class="verdict"><div class="dot" id="dot"></div><div><h1 id="headline"></h1><p id="sub"></p></div></section>
+  <div id="notes"></div>
+  <section class="tiles" id="tiles"></section>
+  <section id="findings"></section>
+  <footer>Hideout only looks. It never deletes, moves, disables or runs anything.<br>Scan again any time: double-click <b>Hideout</b>.</footer>
+</main>
+<script type="application/json" id="hideout-data">/*__HIDEOUT_DATA__*/null</script>
+<script>
+(function () {
+  "use strict";
+  // Everything below renders with textContent only. Task names, file names and folder
+  // names come from the scanned machine, and malware chooses them.
+  var data = null;
+  try { data = JSON.parse(document.getElementById("hideout-data").textContent); } catch (e) { data = null; }
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = String(text); return n; }
+  var LABEL = { high: "Threat", medium: "Suspicious", low: "Worth a look" };
+
+  var dot = document.getElementById("dot"), headline = document.getElementById("headline"), sub = document.getElementById("sub");
+  if (!data) {
+    dot.className = "dot none"; dot.textContent = "?";
+    headline.textContent = "No scan data";
+    sub.textContent = "Open Hideout to run a scan - this page is only the template.";
+    return;
+  }
+  document.getElementById("meta").textContent = data.computer + " · scanned " + data.scannedAt;
+
+  var f = data.findings || [];
+  var high = f.filter(function (x) { return x.severity === "high"; }).length;
+  var mid = f.length - high;
+  if (high) { dot.className = "dot high"; dot.textContent = String(high); headline.textContent = high === 1 ? "1 threat found" : high + " threats found"; }
+  else if (mid) { dot.className = "dot medium"; dot.textContent = String(mid); headline.textContent = mid === 1 ? "1 thing worth a look" : mid + " things worth a look"; }
+  else if ((data.checked && data.checked.couldNotCheck || []).length) { dot.className = "dot unsure"; dot.textContent = "!"; headline.textContent = "Couldn't check everything"; }
+  else { dot.className = "dot clean"; dot.textContent = "✓"; headline.textContent = "Nothing hiding"; }
+  sub.textContent = f.length
+    ? "Something set to start by itself matches how malware hides. Details below."
+    : (headline.textContent === "Nothing hiding" ? "Every program set to start by itself looked normal." : "Nothing flagged, but some programs couldn't be checked. See below.");
+
+  var notes = document.getElementById("notes");
+  if (!data.admin) notes.appendChild(el("div", "note", "Ran without admin rights, so a few system-level tasks may be hidden. For the full picture, right-click Hideout → Run as administrator."));
+
+  var tiles = document.getElementById("tiles");
+  function tile(n, label, mood) { var t = el("div", "tile" + (mood ? " " + mood : "")); t.appendChild(el("div", "n", n)); t.appendChild(el("div", "l", label)); tiles.appendChild(t); }
+  var c = data.checked || {};
+  tile(c.startItems || 0, "start-up items checked");
+  tile(c.inUserFolders || 0, "run from user folders", c.inUserFolders ? "" : "ok");
+  var nc = c.couldNotCheck || [];
+  if (nc.length) {
+    tile(nc.length, "couldn't be checked", "warn");
+    notes.appendChild(el("div", "note", "Hideout couldn't finish checking: " + nc.map(function (x) { return x.program + " (" + x.name + ")"; }).join(", ") + ". Not checked is not the same as clean."));
+  }
+  var d = data.defender;
+  if (d) {
+    tile(d.realtime ? "On" : "Off", "antivirus protection", d.realtime ? "ok" : "bad");
+    tile(d.lastFullScan || "Never", "last full scan", d.lastFullScan ? "" : "warn");
+  } else tile("?", "antivirus status unknown", "warn");
+
+  var box = document.getElementById("findings");
+  if (!f.length) { box.appendChild(el("div", "clean", "No programs that start automatically show the hiding pattern Hideout looks for.")); return; }
+  f.forEach(function (x) {
+    var level = LABEL[x.severity] ? x.severity : "low";
+    var card = el("article", "card");
+    card.appendChild(el("div", "bar " + level));
+    var b = el("div", "body");
+    var top = el("div", "top");
+    top.appendChild(el("span", "prog", x.program));
+    top.appendChild(el("span", "sev " + level, LABEL[level]));
+    b.appendChild(top);
+    b.appendChild(el("div", "where", x.kind + ": " + x.name + " · " + (x.state || "") + (x.arrived ? " · arrived " + x.arrived : "")));
+    var chips = el("div", "chips");
+    (x.reasons || []).forEach(function (r) { chips.appendChild(el("span", "chip", r.tag)); });
+    b.appendChild(chips);
+    b.appendChild(el("div", "path", x.folder));
+    var why = el("details"); why.appendChild(el("summary", null, "Why Hideout flagged it"));
+    var ul = el("ul"); (x.reasons || []).forEach(function (r) { ul.appendChild(el("li", null, r.text)); });
+    if (x.signer) ul.appendChild(el("li", null, "Signed by: " + x.signer));
+    why.appendChild(ul); b.appendChild(why);
+    var todo = el("details"); todo.appendChild(el("summary", null, "What to do"));
+    var ol = el("ol");
+    ol.appendChild(el("li", null, "Don't delete it yet. Deleting first loses evidence, and some malware puts itself back."));
+    ol.appendChild(el("li", null, "Scan that folder: Windows Security → Virus & threat protection → Scan options → Custom scan → pick the folder above. Then run a Full scan."));
+    ol.appendChild(el("li", null, "If it's confirmed bad, change the passwords you used on this PC" + (x.arrived ? " since " + x.arrived.slice(0, 10) : "") + ", starting with your email, and check your accounts' recent sign-ins."));
+    todo.appendChild(ol); b.appendChild(todo);
+    card.appendChild(b); box.appendChild(card);
+  });
+})();
+</script>
+</body>
+</html>

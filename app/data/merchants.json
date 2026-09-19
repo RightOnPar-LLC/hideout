@@ -1,0 +1,2279 @@
+[
+ {
+  "provider": "netflix",
+  "name": "Netflix",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "NETFLIX"
+  ],
+  "domain": "netflix.com",
+  "cancelUrl": "https://www.netflix.com/cancelplan",
+  "cancelSteps": [
+   "Sign in at netflix.com",
+   "Go to the Manage your membership page (netflix.com/cancelplan)",
+   "Click Cancel",
+   "Click Finish Cancellation to confirm"
+  ],
+  "traps": [
+   "Signing out or deleting the app does not cancel the account; you must complete the cancelplan flow",
+   "If someone restarts the account after you cancel, billing resumes"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Netflix's terms state payments are nonrefundable and there are no refunds or credits for partial-month membership periods.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.netflix.com/en/node/407",
+   "https://help.netflix.com/en/node/124418"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "hulu",
+  "name": "Hulu",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "HULU"
+  ],
+  "domain": "hulu.com",
+  "cancelUrl": "https://secure.hulu.com/account",
+  "cancelSteps": [
+   "Sign in at secure.hulu.com/account (no single cancel-link exists; use the Account page)",
+   "Find Your Subscription section and select Cancel",
+   "Skip the pause offer if shown and choose Continue to Cancel",
+   "Select Cancel Subscription to confirm"
+  ],
+  "traps": [
+   "Canceling Hulu does not delete the underlying Disney account used for other Disney services",
+   "If billed through a third party (e.g. a cable/carrier bundle), cancellation must happen with that third party instead"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Hulu's terms say it does not refund or credit for partially used subscription terms or billing periods, except as required by law or at its sole discretion.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.hulu.com/article/hulu-cancel-hulu-subscription",
+   "https://www.hulu.com/subscriber_agreement"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "disney-plus",
+  "name": "Disney+",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "DISNEY PLUS",
+   "DISNEYPLUS"
+  ],
+  "domain": "disneyplus.com",
+  "cancelUrl": "https://www.disneyplus.com/account",
+  "cancelSteps": [
+   "Sign in at disneyplus.com/account (no single cancel-link exists; use the Account page)",
+   "Go to Your Plans & Billing",
+   "Select Cancel Subscription and follow the prompts"
+  ],
+  "traps": [
+   "If you subscribed through Apple, Google, or Amazon, Disney+ cannot cancel it for you — you must cancel with that platform",
+   "Cancelling forfeits unused service, referral, or gift-card credits"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "The Disney+ Subscriber Agreement states there are no refunds or credits for partially used billing periods, except at Disney's sole discretion or as required by law.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.disneyplus.com/article/disneyplus-cancel",
+   "https://www.disneyplus.com/welcome/subscriber-agreement"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "hbo-max",
+  "name": "HBO Max",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "HBO MAX",
+   "MAX.COM"
+  ],
+  "domain": "hbomax.com",
+  "cancelUrl": "https://hbomax.com/subscription",
+  "cancelSteps": [
+   "Sign in at hbomax.com/subscription",
+   "Select Cancel Your Subscription",
+   "Confirm; note the expiration date shown"
+  ],
+  "traps": [
+   "Deleting the app does not cancel the subscription — it auto-renews until cancelled through the correct biller",
+   "If billed through Amazon, Apple, Google Play, Roku, or a carrier, cancellation must happen there instead (check the biller first)"
+  ],
+  "refundLikelihood": "low",
+  "refundBasis": "HBO Max's help center only documents a prorated refund for Extra Member Add-Ons; no general refund policy for the base plan is published.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.hbomax.com/us/Answer/Detail/000002526",
+   "https://help.hbomax.com/us/Answer/Detail/000002528",
+   "https://help.hbomax.com/us/Answer/Detail/000002529"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "paramount-plus",
+  "name": "Paramount+",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "PARAMOUNT+",
+   "PARAMOUNTPLUS"
+  ],
+  "domain": "paramountplus.com",
+  "cancelUrl": "https://www.paramountplus.com/account/",
+  "cancelSteps": [
+   "Sign in at paramountplus.com/account",
+   "Click your username, then Account",
+   "Scroll to Subscription & Billing and select Cancel Subscription",
+   "Click Continue to Cancel and confirm"
+  ],
+  "traps": [
+   "If subscribed via Apple, Google, or Amazon, cancel through that platform instead"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Paramount+ support states you keep access until the billing period ends but will not be refunded for fees already paid.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.paramountplus.com/s/article/PI-How-do-I-cancel-my-subscription?language=en_US"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "peacock",
+  "name": "Peacock",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "PEACOCK",
+   "PEACOCKTV"
+  ],
+  "domain": "peacocktv.com",
+  "cancelUrl": "https://www.peacocktv.com/account/plans",
+  "cancelSteps": [
+   "Log in at peacocktv.com/account/plans",
+   "Select Cancel All Subscriptions to remove the base plan and any add-ons",
+   "Confirm cancellation; a confirmation email is sent"
+  ],
+  "traps": [
+   "If subscribed through Apple, Amazon, Google, Roku, or another platform, Peacock cannot cancel it — you must cancel with that third party"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Peacock's help article states no refunds or credits will be issued for prior payments when you cancel or downgrade, unless required by law.",
+  "refundUrl": "https://www.peacocktv.com/help/article/cancellation",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.peacocktv.com/help/article/cancellation"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "youtube-premium",
+  "name": "YouTube Premium",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "GOOGLE YOUTUBE",
+   "YOUTUBE PREMIUM"
+  ],
+  "domain": "youtube.com",
+  "cancelUrl": "https://www.youtube.com/paid_memberships",
+  "cancelSteps": [
+   "Go to youtube.com/paid_memberships and sign in",
+   "Click Deactivate next to the membership",
+   "Click Continue to cancel",
+   "Choose a reason, click Next, then click Yes, cancel"
+  ],
+  "traps": [
+   "If purchased through the iOS App Store, you must cancel via Apple's Subscriptions settings instead"
+  ],
+  "refundLikelihood": "unknown",
+  "refundBasis": "Google's help article for cancelling YouTube Premium does not state a refund policy for the membership itself.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.google.com/youtube/answer/6308278"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "youtube-tv",
+  "name": "YouTube TV",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "GOOGLE YOUTUBETV",
+   "YOUTUBE TV"
+  ],
+  "domain": "youtube.com",
+  "cancelUrl": "https://tv.youtube.com/",
+  "cancelSteps": [
+   "Go to tv.youtube.com on a web browser and sign in",
+   "Select your profile photo, then Settings",
+   "Select Membership, then Manage",
+   "Click Cancel membership"
+  ],
+  "traps": [
+   "If subscribed through a mobile carrier or internet provider, YouTube TV cannot refund you — that provider's policy applies instead"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Google states YouTube TV does not give refunds or credits for partial billing periods; refunds are only considered if a feature is defective.",
+  "refundUrl": "https://support.google.com/youtubetv/answer/7298539",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.google.com/youtubetv/answer/7129668",
+   "https://support.google.com/youtubetv/answer/7298539"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "spotify",
+  "name": "Spotify",
+  "category": "music",
+  "descriptorPatterns": [
+   "SPOTIFY"
+  ],
+  "domain": "spotify.com",
+  "cancelUrl": "https://www.spotify.com/account/subscription/",
+  "cancelSteps": [
+   "Sign in at spotify.com/account",
+   "Under Subscription, select Manage your subscription",
+   "Select Cancel Subscription and confirm"
+  ],
+  "traps": [
+   "If billed through Apple or Google, cancel via that app store's subscription settings instead",
+   "Cancelling does not refund the current billing period — Premium stays active until the next billing date"
+  ],
+  "refundLikelihood": "low",
+  "refundBasis": "Spotify says cancelling does not refund a payment already processed; a refund right exists only within 14 days of a purchase and is void once the service is used.",
+  "refundUrl": "https://support.spotify.com/us/article/refund-policy/",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.spotify.com/us/article/cancel-premium/",
+   "https://support.spotify.com/us/article/refund-policy/"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "apple-subscriptions",
+  "name": "Apple (App Store / iCloud+ / Apple One)",
+  "category": "app-store",
+  "descriptorPatterns": [
+   "APPLE.COM/BILL"
+  ],
+  "domain": "apple.com",
+  "cancelUrl": "https://account.apple.com",
+  "cancelSteps": [
+   "On iPhone/iPad: Settings > your name > Subscriptions > select the subscription > Cancel Subscription",
+   "On Mac: App Store > your name > Account Settings > Subscriptions > Manage > select subscription > Cancel Subscription",
+   "Without an Apple device: sign in at account.apple.com and manage Subscriptions there",
+   "Cancellation applies to any app or service billed through Apple, not just Apple's own apps"
+  ],
+  "traps": [
+   "This is the required path for ANY app subscription bought through the iOS/Mac App Store, even if the app itself is a different company's product",
+   "Refunds for Apple purchases are requested separately at reportaproblem.apple.com, not guaranteed"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Apple accepts refund requests via reportaproblem.apple.com for recent charges, though approval is case-by-case.",
+  "refundUrl": "https://reportaproblem.apple.com",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.apple.com/en-us/118428",
+   "https://support.apple.com/en-us/108318"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "google-play",
+  "name": "Google Play Subscriptions",
+  "category": "app-store",
+  "descriptorPatterns": [
+   "GOOGLE PLAY"
+  ],
+  "domain": "google.com",
+  "cancelUrl": "https://play.google.com/store/account/subscriptions",
+  "cancelSteps": [
+   "Go to play.google.com/store/account/subscriptions and sign in",
+   "Select the subscription to cancel",
+   "Click Cancel subscription and confirm",
+   "On Android: Play Store app > profile icon > Payments & subscriptions > Subscriptions"
+  ],
+  "traps": [
+   "This is the required path for ANY app subscription bought through Google Play, even if the app itself is a different company's product",
+   "Uninstalling the app does not cancel the subscription"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Google Play accepts refund requests through its own refund flow, though approval is discretionary and generally time-limited.",
+  "refundUrl": "https://support.google.com/googleplay/answer/2479637",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.google.com/googleplay/answer/7018481"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "amazon-prime",
+  "name": "Amazon Prime",
+  "category": "shopping",
+  "descriptorPatterns": [
+   "AMAZON PRIME",
+   "AMZN PRIME"
+  ],
+  "domain": "amazon.com",
+  "cancelUrl": "https://www.amazon.com/yourmembershipsandsubscriptions",
+  "cancelSteps": [
+   "Sign in and go to Your Memberships and Subscriptions",
+   "Find Prime, select Manage Subscription",
+   "Select Cancel Subscription under Advanced Controls",
+   "Confirm the end date"
+  ],
+  "traps": [
+   "If Prime was signed up for via Google Play/Android, cancel through Google's subscription settings instead"
+  ],
+  "refundLikelihood": "good",
+  "refundBasis": "Amazon states paid members who haven't used Prime benefits are eligible for a full refund of the current membership period, processed in three to five business days.",
+  "refundUrl": "https://www.amazon.com/gp/help/customer/display.html?nodeId=TKX9QawwBIbXy736eI",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.amazon.com/gp/help/customer/display.html?nodeId=TKX9QawwBIbXy736eI",
+   "https://www.amazon.com/gp/help/customer/display.html?nodeId=GU8AWX4GDKM7QGTE"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "audible",
+  "name": "Audible",
+  "category": "other",
+  "descriptorPatterns": [
+   "AUDIBLE"
+  ],
+  "domain": "audible.com",
+  "cancelUrl": "https://www.audible.com/account",
+  "cancelSteps": [
+   "Sign in at audible.com",
+   "Select your name in the top navigation, then Membership details",
+   "Select the Cancel membership link",
+   "If billed through the App Store or Google Play, follow that platform's cancellation steps instead"
+  ],
+  "traps": [
+   "Titles purchased with credits remain yours to keep after cancellation, but the membership itself is not refunded"
+  ],
+  "refundLikelihood": "low",
+  "refundBasis": "Audible says cancelling does not refund fees already paid, though an unused monthly credit may sometimes be pro-rated depending on timing.",
+  "refundUrl": "https://help.audible.com/s/article/cancel-membership?language=en_US",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.audible.com/s/article/cancel-membership?language=en_US"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "kindle-unlimited",
+  "name": "Kindle Unlimited",
+  "category": "other",
+  "descriptorPatterns": [
+   "AMAZON KINDLE",
+   "KINDLE UNLIMITED"
+  ],
+  "domain": "amazon.com",
+  "cancelUrl": "https://www.amazon.com/yourmembershipsandsubscriptions",
+  "cancelSteps": [
+   "Sign in and go to Your Memberships and Subscriptions",
+   "Find Kindle Unlimited membership settings",
+   "Select Cancel Kindle Unlimited Membership, then Cancel Membership"
+  ],
+  "traps": [
+   "Checked-out books become unavailable once access ends after the billing date"
+  ],
+  "refundLikelihood": "unknown",
+  "refundBasis": "Amazon's Kindle Unlimited help page covers cancellation steps but does not state a refund policy.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.amazon.com/gp/help/customer/display.html?nodeId=GLSQ4722655M4ZEJ"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "microsoft-365",
+  "name": "Microsoft 365",
+  "category": "software",
+  "descriptorPatterns": [
+   "MICROSOFT 365",
+   "MSBILL.INFO"
+  ],
+  "domain": "microsoft.com",
+  "cancelUrl": "https://account.microsoft.com/services/microsoft365",
+  "cancelSteps": [
+   "Sign in at account.microsoft.com/services/microsoft365 with the account used to purchase",
+   "Select Cancel subscription",
+   "Follow the prompts to confirm"
+  ],
+  "traps": [
+   "If purchased via Google Play, the Apple App Store, or a third-party retailer, you must cancel and get refunds through them instead"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Microsoft offers a prorated refund within 7 days of a charge for MCA billing accounts, or a prorated credit/refund for MOSA accounts; policy varies by billing type and country.",
+  "refundUrl": "https://support.microsoft.com/en-us/accounts-billing/subscriptions/microsoft-subscription-refund-policy",
+  "cancelByEmail": null,
+  "software": [
+   "Microsoft 365",
+   "Microsoft Office"
+  ],
+  "sources": [
+   "https://support.microsoft.com/en-us/accounts-billing/subscriptions/cancel-a-microsoft-365-subscription",
+   "https://support.microsoft.com/en-us/accounts-billing/subscriptions/microsoft-subscription-refund-policy"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "xbox-game-pass",
+  "name": "Xbox Game Pass",
+  "category": "gaming",
+  "descriptorPatterns": [
+   "XBOX",
+   "XBOX GAME PASS"
+  ],
+  "domain": "microsoft.com",
+  "cancelUrl": "https://account.microsoft.com/services",
+  "cancelSteps": [
+   "Sign in at account.microsoft.com/services with the Microsoft account used for Game Pass",
+   "Under Services & subscriptions, select Manage next to the Game Pass subscription",
+   "Select Cancel subscription and confirm"
+  ],
+  "traps": [
+   "Cancelling revokes access to the entire Game Pass library, including titles you had installed"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Xbox subscriptions fall under Microsoft's general subscription refund policy, which allows a prorated refund/credit shortly after a charge depending on billing account type and country.",
+  "refundUrl": "https://support.microsoft.com/en-us/accounts-billing/subscriptions/microsoft-subscription-refund-policy",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.xbox.com/en-US/help/subscriptions-billing/manage-subscriptions/cancel-recurring-billing-or-subscription",
+   "https://support.microsoft.com/en-us/account-billing/cancel-your-microsoft-subscription-c2c6b0e3-cab3-cb98-d83e-c9ad54620530"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "adobe-creative-cloud",
+  "name": "Adobe Creative Cloud",
+  "category": "software",
+  "descriptorPatterns": [
+   "ADOBE",
+   "ADOBE CREATIVE CLD"
+  ],
+  "domain": "adobe.com",
+  "cancelUrl": "https://account.adobe.com",
+  "cancelSteps": [
+   "Sign in at account.adobe.com",
+   "Select Manage plan for the plan you want to cancel",
+   "Follow the prompts to confirm cancellation"
+  ],
+  "traps": [
+   "Cancelling an annual plan (paid monthly) after 14 days triggers an early-termination fee of 50% of the remaining contract balance",
+   "If purchased via Apple, Google, or Microsoft, Adobe can't cancel it — cancel through that provider instead"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Adobe gives a full refund if you cancel within 14 days of the initial purchase; after that, payments are non-refundable and annual plans incur a termination fee.",
+  "refundUrl": "https://helpx.adobe.com/account/individual/subscriptions-and-plans/renewals-and-cancellations/cancel-adobe-subscription.html",
+  "cancelByEmail": null,
+  "software": [
+   "Adobe Creative Cloud",
+   "Creative Cloud Desktop"
+  ],
+  "sources": [
+   "https://helpx.adobe.com/account/individual/subscriptions-and-plans/renewals-and-cancellations/cancel-adobe-subscription.html",
+   "https://helpx.adobe.com/account/individual/terms-policies-and-regulations/adobe-subscription-terms.html"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "dropbox",
+  "name": "Dropbox",
+  "category": "cloud-storage",
+  "descriptorPatterns": [
+   "DROPBOX"
+  ],
+  "domain": "dropbox.com",
+  "cancelUrl": "https://www.dropbox.com/account/plan",
+  "cancelSteps": [
+   "Sign in at dropbox.com/account/plan",
+   "Select the option to downgrade/cancel the paid plan",
+   "Confirm; the account converts to free Dropbox Basic at the end of the billing cycle"
+  ],
+  "traps": [
+   "Dropbox also accepts cancellation by physical mail letter if you can't cancel online"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Dropbox says it generally doesn't issue refunds for US customers; a 14-day refund right applies only to subscribers in the EU, UK, or Turkey.",
+  "refundUrl": "https://help.dropbox.com/plans/refund",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.dropbox.com/plans/downgrade-dropbox-individual-plans",
+   "https://help.dropbox.com/plans/refund"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "norton",
+  "name": "Norton",
+  "category": "security-software",
+  "descriptorPatterns": [
+   "NORTON",
+   "NORTONLIFELOCK"
+  ],
+  "domain": "norton.com",
+  "cancelUrl": "https://my.norton.com",
+  "cancelSteps": [
+   "Log in at my.norton.com",
+   "Select Manage my subscriptions",
+   "Choose the option to cancel/turn off auto-renewal",
+   "Uninstall the software from your devices after cancelling"
+  ],
+  "traps": [],
+  "refundLikelihood": "good",
+  "refundBasis": "Norton offers a 60-day money-back guarantee on annual subscriptions (each renewal charge included) and a 14-day guarantee on monthly subscriptions.",
+  "refundUrl": "https://support.norton.com/sp/en/us/home/current/solutions/kb20100113164023EN",
+  "cancelByEmail": null,
+  "software": [
+   "Norton 360",
+   "Norton Security",
+   "Norton AntiVirus Plus"
+  ],
+  "sources": [
+   "https://support.norton.com/sp/en/us/home/current/solutions/kb20100113164023EN"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "mcafee",
+  "name": "McAfee",
+  "category": "security-software",
+  "descriptorPatterns": [
+   "MCAFEE"
+  ],
+  "domain": "mcafee.com",
+  "cancelUrl": "https://myaccount.mcafee.com",
+  "cancelSteps": [
+   "Sign in at myaccount.mcafee.com",
+   "Select Account, then Auto-Renewal Settings",
+   "Select Update settings for the subscription, then End my membership",
+   "Click through the retention offer screen — cancellation isn't final until you do"
+  ],
+  "traps": [
+   "McAfee shows a retention offer (\"Before you go\") after you click cancel; the subscription is not actually cancelled until you click past it",
+   "Apple- and Google-billed subscriptions must be cancelled through those stores"
+  ],
+  "refundLikelihood": "good",
+  "refundBasis": "McAfee offers a full refund within 30 days of an initial purchase or within 60 days of an automatic-renewal charge for eligible direct consumer purchases.",
+  "refundUrl": "https://www.mcafee.com/support/s/article/000001679-refund",
+  "cancelByEmail": null,
+  "software": [
+   "McAfee Total Protection",
+   "McAfee LiveSafe",
+   "McAfee AntiVirus Plus"
+  ],
+  "sources": [
+   "https://www.mcafee.com/support/s/article/000002624?language=en_US",
+   "https://www.mcafee.com/support/s/article/000001679-refund"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "avast",
+  "name": "Avast",
+  "category": "security-software",
+  "descriptorPatterns": [
+   "AVAST"
+  ],
+  "domain": "avast.com",
+  "cancelUrl": "https://id.avast.com/sign-in",
+  "cancelSteps": [
+   "Sign in at id.avast.com",
+   "Go to My account, then Order History",
+   "Select Request a Refund on the eligible order (which also stops the subscription), or use My subscriptions > Manage subscriptions to turn off renewal"
+  ],
+  "traps": [],
+  "refundLikelihood": "good",
+  "refundBasis": "Avast offers a 30-day money-back guarantee for purchases made directly through Avast, the Avast app, or Google Play.",
+  "refundUrl": "https://support.avast.com/en-us/article/refund-request/",
+  "cancelByEmail": null,
+  "software": [
+   "Avast Free Antivirus",
+   "Avast Premium Security",
+   "Avast One"
+  ],
+  "sources": [
+   "https://www.avast.com/en-us/cancellation-refund-policy",
+   "https://support.avast.com/en-us/article/refund-request/"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "avg",
+  "name": "AVG",
+  "category": "security-software",
+  "descriptorPatterns": [
+   "AVG"
+  ],
+  "domain": "avg.com",
+  "cancelUrl": "https://my.avg.com",
+  "cancelSteps": [
+   "Sign in at my.avg.com with the email used to purchase",
+   "Click Manage subscriptions on the My subscriptions tile",
+   "Select the subscription and turn off automatic renewal"
+  ],
+  "traps": [
+   "The money-back guarantee does not apply to AVG purchased from retail stores or third-party resellers — contact them instead"
+  ],
+  "refundLikelihood": "good",
+  "refundBasis": "AVG offers a 30-day money-back guarantee for purchases made directly through the AVG website or Google Play.",
+  "refundUrl": "https://support.avg.com/SupportArticleView?l=en&urlname=avg-refund-request",
+  "cancelByEmail": null,
+  "software": [
+   "AVG AntiVirus Free",
+   "AVG Internet Security"
+  ],
+  "sources": [
+   "https://www.avg.com/en-us/cancellation-refund-policy",
+   "https://support.avg.com/SupportArticleView?l=en&urlname=avg-sale-billing-faq"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "malwarebytes",
+  "name": "Malwarebytes",
+  "category": "security-software",
+  "descriptorPatterns": [
+   "MALWAREBYTES"
+  ],
+  "domain": "malwarebytes.com",
+  "cancelUrl": "https://my.malwarebytes.com",
+  "cancelSteps": [
+   "Sign in at my.malwarebytes.com",
+   "Go to the payment page for the subscription",
+   "Click Turn auto-renewal off, select a reason, and click Send"
+  ],
+  "traps": [
+   "Android/iOS subscriptions must be cancelled through Google Play or the Apple App Store instead"
+  ],
+  "refundLikelihood": "good",
+  "refundBasis": "Malwarebytes offers a 60-day money-back guarantee for direct Online Store purchases and renewals.",
+  "refundUrl": "https://help.malwarebytes.com/hc/en-us/articles/31589478583579-Manage-auto-renewal-for-your-Malwarebytes-subscription",
+  "cancelByEmail": null,
+  "software": [
+   "Malwarebytes",
+   "Malwarebytes Premium"
+  ],
+  "sources": [
+   "https://help.malwarebytes.com/hc/en-us/articles/31589478583579-Manage-auto-renewal-for-your-Malwarebytes-subscription"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "linkedin-premium",
+  "name": "LinkedIn Premium",
+  "category": "other",
+  "descriptorPatterns": [
+   "LINKEDIN"
+  ],
+  "domain": "linkedin.com",
+  "cancelUrl": "https://www.linkedin.com/premium",
+  "cancelSteps": [
+   "Sign in and go to the My Premium page (linkedin.com/premium)",
+   "Open Manage Premium account settings",
+   "Select Cancel subscription and confirm",
+   "Cancel at least 1 day before the next billing date to avoid another charge"
+  ],
+  "traps": [
+   "If purchased via iTunes/App Store, cancellation starts on LinkedIn but finishes in Apple's Subscriptions settings",
+   "LinkedIn cannot provide billing support for iTunes purchases — refunds must go through Apple"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "LinkedIn Premium subscriptions may be refunded within 7 days of being charged if unused; EU subscribers get a 14-day right, and Denmark/Netherlands residents get a prorated refund on cancellation.",
+  "refundUrl": "https://www.linkedin.com/help/linkedin/answer/a1337140",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.linkedin.com/help/linkedin/answer/a545578",
+   "https://www.linkedin.com/help/linkedin/answer/a1337140"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "match",
+  "name": "Match",
+  "category": "dating",
+  "descriptorPatterns": [
+   "MATCH.COM"
+  ],
+  "domain": "match.com",
+  "cancelUrl": "https://www.match.com/",
+  "cancelSteps": [
+   "Sign in and click the gear/settings icon",
+   "Select Manage Subscription",
+   "Follow the prompts to cancel (turns off auto-renewal)",
+   "If subscribed via Apple, cancel through Apple's Subscriptions settings instead"
+  ],
+  "traps": [
+   "Cancelling turns off auto-renewal but does not refund the current period"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Match's Terms of Use make subscriptions non-refundable, with an exception only if the user dies or becomes disabled before the subscription ends.",
+  "refundUrl": "https://help.match.com/hc/en-us/articles/6241384414107-Refund-Policy",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.match.com/hc/en-us/articles/6077124196891-Canceling-a-Match-Subscription",
+   "https://help.match.com/hc/en-us/articles/6241384414107-Refund-Policy"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "tinder",
+  "name": "Tinder",
+  "category": "dating",
+  "descriptorPatterns": [
+   "GOOGLE TINDER",
+   "TINDER"
+  ],
+  "domain": "tinder.com",
+  "cancelUrl": "https://www.help.tinder.com/hc/en-us/articles/115003554466-Cancel-your-subscription",
+  "cancelSteps": [
+   "Tinder subscriptions are billed by Apple or Google, not Tinder directly — open the App Store (iOS) or Google Play (Android) app",
+   "On Google Play: Payments & subscriptions > Subscriptions > Tinder Gold > Cancel subscription",
+   "On Apple: Settings > your name > Subscriptions > Tinder Gold/Platinum > Cancel Subscription"
+  ],
+  "traps": [
+   "Uninstalling the app does not cancel the subscription",
+   "Refunds are handled entirely by Apple or Google, not Tinder"
+  ],
+  "refundLikelihood": "unknown",
+  "refundBasis": "Tinder defers all refund decisions to Apple's or Google's own policies and does not publish its own refund terms.",
+  "refundUrl": "https://www.help.tinder.com/hc/en-us/articles/115003521343-Refund-Requests",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.help.tinder.com/hc/en-us/articles/115003554466-Cancel-your-subscription",
+   "https://www.help.tinder.com/hc/en-us/articles/115003521343-Refund-Requests"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "bumble",
+  "name": "Bumble",
+  "category": "dating",
+  "descriptorPatterns": [
+   "BUMBLE"
+  ],
+  "domain": "bumble.com",
+  "cancelUrl": "https://support.bumble.com/hc/en-us/articles/28534541366045-Canceling-subscriptions",
+  "cancelSteps": [
+   "If purchased directly from Bumble: open payment settings under your profile and cancel there",
+   "If purchased via Apple App Store or Google Play: cancel through that store's subscription settings instead",
+   "Cancel at least 24 hours before renewal to avoid another charge"
+  ],
+  "traps": [],
+  "refundLikelihood": "low",
+  "refundBasis": "Bumble does not give prorated refunds on cancellation; California subscribers can cancel and get a refund within 3 business days of subscribing, and Apple/Google purchases follow their own refund rules.",
+  "refundUrl": "https://support.bumble.com/hc/en-us/articles/28783028014877-Requesting-a-refund",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.bumble.com/hc/en-us/articles/28534541366045-Canceling-subscriptions",
+   "https://support.bumble.com/hc/en-us/articles/28783028014877-Requesting-a-refund"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "planet-fitness",
+  "name": "Planet Fitness",
+  "category": "fitness",
+  "descriptorPatterns": [
+   "PLANET FITNESS"
+  ],
+  "domain": "planetfitness.com",
+  "cancelUrl": "https://www.planetfitness.com/about-planet-fitness/customer-service",
+  "cancelSteps": [
+   "Planet Fitness does not accept cancellation online, by phone, by email, or through the app",
+   "Visit your home club in person and cancel at the front desk, OR",
+   "Mail a signed cancellation letter (name, address, phone, membership ID) via USPS Certified Mail to your home club (not corporate)"
+  ],
+  "traps": [
+   "Only your original \"home club\" can process the cancellation — mailing corporate headquarters does not work",
+   "No online or app cancellation option exists despite online sign-up being available"
+  ],
+  "refundLikelihood": "unknown",
+  "refundBasis": "Planet Fitness's public customer-service page describes how to cancel but does not state a refund policy for dues already paid.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.planetfitness.com/about-planet-fitness/customer-service"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "peloton",
+  "name": "Peloton",
+  "category": "fitness",
+  "descriptorPatterns": [
+   "PELOTON"
+  ],
+  "domain": "onepeloton.com",
+  "cancelUrl": "https://support.onepeloton.com/s/article/Peloton-Membership-How-To-Cancel-Your-App-Membership?language=en_US",
+  "cancelSteps": [
+   "Open the Peloton app (web cancellation is not offered for App membership) and go to Preferences > Memberships",
+   "Select Manage next to the subscription, then Cancel Subscription",
+   "Choose a cancellation reason and decline any retention offer",
+   "Confirm; a confirmation email is sent"
+  ],
+  "traps": [
+   "If subscribed via Apple or Google Play, their refund policies apply instead of Peloton's"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Peloton's Membership Terms say there is no prorated refund for the current membership period, with a narrow exception for New York residents within 14 days of a price increase.",
+  "refundUrl": "https://www.onepeloton.com/membership-terms",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://support.onepeloton.com/s/article/Peloton-Membership-How-To-Cancel-Your-App-Membership?language=en_US",
+   "https://www.onepeloton.com/membership-terms"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "siriusxm",
+  "name": "SiriusXM",
+  "category": "music",
+  "descriptorPatterns": [
+   "SIRIUSXM",
+   "SIRIUS XM"
+  ],
+  "domain": "siriusxm.com",
+  "cancelUrl": "https://www.siriusxm.com/help/manage-or-cancel-service",
+  "cancelSteps": [
+   "Contact SiriusXM via chat at siriusxm.com/contactus or call 866-635-8641 to cancel",
+   "Confirm the cancellation effective date and keep the chat transcript or confirmation"
+  ],
+  "traps": [
+   "If purchased through the App Store, Google Play, Roku, or T-Mobile, that platform's refund policy applies instead"
+  ],
+  "refundLikelihood": "low",
+  "refundBasis": "SiriusXM audio subscriptions are non-refundable as of March 2024, with limited exceptions: annual plans within 30 days and monthly plans within 7 days.",
+  "refundUrl": "https://www.siriusxm.com/help/refund-policy-change",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.siriusxm.com/help/refund-policy-change",
+   "https://www.siriusxm.com/help/manage-or-cancel-service"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "new-york-times",
+  "name": "The New York Times",
+  "category": "news",
+  "descriptorPatterns": [
+   "NYTIMES",
+   "NEW YORK TIMES"
+  ],
+  "domain": "nytimes.com",
+  "cancelUrl": "https://myaccount.nytimes.com/",
+  "cancelSteps": [
+   "Sign in at myaccount.nytimes.com",
+   "Open Account and Subscription Overview",
+   "Select the subscription and complete the cancellation option",
+   "Or call Customer Care at (800) 591-9233"
+  ],
+  "traps": [],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "The New York Times states no refund or credit is normally due for time remaining after cancellation, except where required by law.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.niemanlab.org/2026/01/did-you-cancel-your-new-york-times-subscription-you-may-be-able-to-get-paid/"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "wall-street-journal",
+  "name": "The Wall Street Journal",
+  "category": "news",
+  "descriptorPatterns": [
+   "WSJ",
+   "DOW JONES"
+  ],
+  "domain": "wsj.com",
+  "cancelUrl": "https://customercenter.wsj.com",
+  "cancelSteps": [
+   "Sign in at customercenter.wsj.com with your subscription email",
+   "Go to Subscriptions / Manage Subscription",
+   "Select Cancel subscription and follow the prompts",
+   "Or call 1-800-JOURNAL (568-7625)"
+  ],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": "WSJ's customer center provides cancellation steps but no published refund policy was found on its own help pages.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://customercenter.wsj.com"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "duolingo",
+  "name": "Duolingo",
+  "category": "software",
+  "descriptorPatterns": [
+   "DUOLINGO"
+  ],
+  "domain": "duolingo.com",
+  "cancelUrl": "https://www.duolingo.com/help/cancel-my-super-duolingo-subscription",
+  "cancelSteps": [
+   "Sign in on duolingo.com or the app",
+   "Open account/subscription settings and select cancel Super Duolingo",
+   "If billed via Apple or Google, cancel through that app store instead"
+  ],
+  "traps": [],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Duolingo's help center states cancelling will not retroactively refund subscription payments and fees are not prorated by cancellation date.",
+  "refundUrl": "https://www.duolingo.com/help/how-do-I-request-a-refund",
+  "cancelByEmail": null,
+  "software": [
+   "Duolingo"
+  ],
+  "sources": [
+   "https://www.duolingo.com/help/cancel-my-super-duolingo-subscription",
+   "https://www.duolingo.com/help/how-do-I-request-a-refund"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "grammarly",
+  "name": "Grammarly",
+  "category": "software",
+  "descriptorPatterns": [
+   "GRAMMARLY"
+  ],
+  "domain": "grammarly.com",
+  "cancelUrl": "https://account.grammarly.com",
+  "cancelSteps": [
+   "Sign in at account.grammarly.com",
+   "Click Account tab, then Your account > Subscription",
+   "Click Cancel Subscription at the bottom of the page",
+   "Click Continue to confirm",
+   "If purchased via Apple or Google Play, cancel through that app store instead"
+  ],
+  "traps": [],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Grammarly says refunds are issued only if required by law; it operates a strict non-refundable policy for all subscription plans.",
+  "refundUrl": "https://support.grammarly.com/hc/en-us/articles/360049189071-Can-I-get-a-refund",
+  "cancelByEmail": null,
+  "software": [
+   "Grammarly Desktop",
+   "Grammarly for Windows"
+  ],
+  "sources": [
+   "https://support.grammarly.com/hc/en-us/articles/115000090172-How-do-I-cancel-my-subscription",
+   "https://support.grammarly.com/hc/en-us/articles/360049189071-Can-I-get-a-refund"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "canva",
+  "name": "Canva",
+  "category": "software",
+  "descriptorPatterns": [
+   "CANVA"
+  ],
+  "domain": "canva.com",
+  "cancelUrl": "https://www.canva.com/settings/billing-and-plans",
+  "cancelSteps": [
+   "Sign in and open Menu > Settings > Billing & Plans",
+   "Select Cancel subscription and confirm",
+   "If subscribed via Apple or Google, cancel through that app store instead"
+  ],
+  "traps": [],
+  "refundLikelihood": "decent",
+  "refundBasis": "Canva gives a full refund if you cancel within 30 days of purchasing a yearly plan; monthly plans are generally not refunded once billed.",
+  "refundUrl": "https://www.canva.com/help/subscription-refunds/",
+  "cancelByEmail": null,
+  "software": [
+   "Canva"
+  ],
+  "sources": [
+   "https://www.canva.com/help/cancel-canva-plan/",
+   "https://www.canva.com/help/subscription-refunds/"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "chegg",
+  "name": "Chegg",
+  "category": "other",
+  "descriptorPatterns": [
+   "CHEGG"
+  ],
+  "domain": "chegg.com",
+  "cancelUrl": "https://www.chegg.com/my/account",
+  "cancelSteps": [
+   "Sign in and go to My Account > Orders",
+   "Open the Subscriptions tab, select the plan and click Continue",
+   "Choose a cancellation reason and click Continue",
+   "Click the Cancel Subscription button to confirm"
+  ],
+  "traps": [
+   "Must be done from a laptop/desktop browser to permanently cancel, per Chegg's own guidance"
+  ],
+  "refundLikelihood": "unknown",
+  "refundBasis": "No standard refund policy was found on Chegg's own help pages; refunds for unused tutoring minutes are handled case-by-case through customer service.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.chegg.com/en/contactus?a=How-do-I-cancel-my-Chegg-Study-subscription---id--LiAlcgGuQN6HnOLVkrpNgw"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "uber-one",
+  "name": "Uber One",
+  "category": "shopping",
+  "descriptorPatterns": [
+   "UBER ONE"
+  ],
+  "domain": "uber.com",
+  "cancelUrl": "https://help.uber.com/riders/article/how-do-i-cancel-my-uber-one-membership",
+  "cancelSteps": [
+   "Open the Uber or Uber Eats app (no separate web cancel page)",
+   "Go to Account, select Uber One",
+   "Select Manage Membership, then End Membership"
+  ],
+  "traps": [
+   "Cancel at least 24-48 hours before the renewal date to avoid another charge",
+   "After a refund, you can't repurchase Uber One for 3 days"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Uber states Uber One payments are non-refundable and not prorated, except that a charge within 24 hours of cancelling before renewal is automatically refunded.",
+  "refundUrl": "https://help.uber.com/en/riders/article/uber-one-immediate-cancellation-and-refund?nodeId=2748c138-d8b9-49a7-b6ee-3e2bb07bae28",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.uber.com/en/riders/article/how-do-i-cancel-my-uber-one-membership?nodeId=2748c138-d8b9-49a7-b6ee-3e2bb07bae28",
+   "https://help.uber.com/en/ubereats/restaurants/article/uber-one-cancellation-and-refund?nodeId=2c21ad9e-2795-4b62-b3f8-95155ce9dd27"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "doordash-dashpass",
+  "name": "DoorDash DashPass",
+  "category": "shopping",
+  "descriptorPatterns": [
+   "DOORDASH",
+   "DASHPASS"
+  ],
+  "domain": "doordash.com",
+  "cancelUrl": "https://www.doordash.com/consumer/dashpass/",
+  "cancelSteps": [
+   "Sign in on the DoorDash app or doordash.com",
+   "Go to Account > Manage DashPass",
+   "Select Cancel Membership, choose a reason, and submit"
+  ],
+  "traps": [
+   "Must cancel at least 24 hours before the next scheduled payment to avoid another charge"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "DoorDash says DashPass does not issue refunds once you cancel, though benefits remain until the end of the current billing period.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://help.doordash.com/en-us/consumers/article/how-do-i-cancel-my-dashpass-subscription"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "instacart-plus",
+  "name": "Instacart+",
+  "category": "shopping",
+  "descriptorPatterns": [
+   "INSTACART"
+  ],
+  "domain": "instacart.com",
+  "cancelUrl": "https://www.instacart.com/store/account/express",
+  "cancelSteps": [
+   "Sign in on instacart.com or the app",
+   "Select the menu icon (web) or Account icon (app), then Your Instacart+ membership",
+   "Under Manage your membership, select Cancel membership"
+  ],
+  "traps": [],
+  "refundLikelihood": "decent",
+  "refundBasis": "Instacart+ annual members can cancel within the first 5 calendar days and get a full refund if no orders were placed with the membership; monthly plans get no prorated refund.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.instacart.com/help/section/360007797952/4408784716820"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "walmart-plus",
+  "name": "Walmart+",
+  "category": "shopping",
+  "descriptorPatterns": [
+   "WALMART PLUS",
+   "WALMART+"
+  ],
+  "domain": "walmart.com",
+  "cancelUrl": "https://www.walmart.com/account",
+  "cancelSteps": [
+   "Sign in at walmart.com and open your account",
+   "Select Walmart+, then Manage membership",
+   "Select Manage beside your plan, then Cancel beside Cancel membership",
+   "Or call Walmart Customer Care at (800) 924-9206"
+  ],
+  "traps": [
+   "A pause option (up to 1 month at a time, 3x per year) exists as an alternative to full cancellation"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Walmart's Terms of Use state the membership fee is non-refundable except as expressly stated or required by law.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.walmart.com/help/article/manage-walmart-membership/126c9a990a944c3abd8531de52a87440",
+   "https://www.walmart.com/help/article/walmart-terms-of-use/de696dfa1dd4423bb1005668dd19b845"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "costco",
+  "name": "Costco Membership",
+  "category": "shopping",
+  "descriptorPatterns": [
+   "COSTCO WHSE",
+   "COSTCO"
+  ],
+  "domain": "costco.com",
+  "cancelUrl": "https://customerservice.costco.com",
+  "cancelSteps": [
+   "Costco does not offer online cancellation",
+   "Cancel in person at the membership desk of any warehouse (refund issued immediately), OR",
+   "Call 1-800-774-2678 to cancel by phone (refund lands on original payment method within a few business days)"
+  ],
+  "traps": [
+   "Online cancellation is not available — only in person or by phone"
+  ],
+  "refundLikelihood": "good",
+  "refundBasis": "Costco's 100% satisfaction guarantee lets a member cancel and get a full, non-prorated refund of the membership fee at any time.",
+  "refundUrl": "https://customerservice.costco.com/app/answers/detail/a_id/1191/~/what-is-costcos-return-policy%3F",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://customerservice.costco.com/app/answers/list/kw/how%20to%20cancel%20my%20membership/page/1"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "playstation-plus",
+  "name": "PlayStation Plus",
+  "category": "gaming",
+  "descriptorPatterns": [
+   "PLAYSTATION NETWORK",
+   "SONY PLAYSTATION"
+  ],
+  "domain": "playstation.com",
+  "cancelUrl": "https://www.playstation.com/en-us/support/store/cancel-ps-store-subscription/",
+  "cancelSteps": [
+   "Sign in to Account Management (via the link on this page or account.sony.com)",
+   "Select Subscription",
+   "Select Cancel below the PlayStation Plus subscription",
+   "Or on console: Settings > Users and Accounts > Payment and Subscriptions > Subscriptions > PlayStation Plus > Turn Off Auto-Renew"
+  ],
+  "traps": [],
+  "refundLikelihood": "decent",
+  "refundBasis": "Sony gives a full refund if you cancel within 14 days of purchase and haven't used the benefits; a partial refund based on days remaining applies if you have used it.",
+  "refundUrl": "https://www.playstation.com/en-us/legal/playstation-store-cancellation-policy/",
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://www.playstation.com/en-us/support/store/cancel-ps-store-subscription/",
+   "https://www.playstation.com/en-us/legal/playstation-store-cancellation-policy/"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "nintendo-switch-online",
+  "name": "Nintendo Switch Online",
+  "category": "gaming",
+  "descriptorPatterns": [
+   "NINTENDO"
+  ],
+  "domain": "nintendo.com",
+  "cancelUrl": "https://accounts.nintendo.com/portal",
+  "cancelSteps": [
+   "Sign in at accounts.nintendo.com/portal",
+   "Select Nintendo Switch Online",
+   "Select Terminate automatic renewal, then confirm",
+   "Do this at least 48 hours before expiration"
+  ],
+  "traps": [
+   "Once auto-renewal is turned off it cannot be turned back on for that membership term",
+   "Cloud save backups stop working once the membership lapses (restorable if you resubscribe within 180 days)"
+  ],
+  "refundLikelihood": "near-zero",
+  "refundBasis": "Nintendo's terms say it cannot offer refunds or credits for remaining membership time, aside from a statutory 14-day right in some regions outside the US.",
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "sources": [
+   "https://en-americas-support.nintendo.com/app/answers/detail/a_id/41196/~/how-to-cancel-a-nintendo-switch-online-membership-or-adjust-auto-renewal",
+   "https://en-americas-support.nintendo.com/app/answers/detail/a_id/41191/~/can-i-cancel-my-nintendo-switch-online-membership"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "quickbooks-online",
+  "name": "QuickBooks Online",
+  "category": "software",
+  "descriptorPatterns": [
+   "INTUIT",
+   "QUICKBOOKS"
+  ],
+  "domain": "intuit.com",
+  "cancelUrl": "https://qbo.intuit.com/app/billing",
+  "cancelSteps": [
+   "Sign in to QuickBooks Online as the primary or company admin",
+   "Go to Settings (gear icon), select Subscriptions and billing",
+   "In the QuickBooks section select Cancel subscription and follow the on-screen steps"
+  ],
+  "traps": [
+   "After cancelling you get read-only access to your data for one year, then must resubscribe to see it again"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Intuit offers a refund on annual QuickBooks Online subscriptions if cancelled within 60 days of purchase; monthly subscriptions are not eligible for a prorated refund.",
+  "refundUrl": "https://quickbooks.intuit.com/return_policy/",
+  "cancelByEmail": null,
+  "software": [
+   "QuickBooks Desktop",
+   "QuickBooks"
+  ],
+  "sources": [
+   "https://quickbooks.intuit.com/learn-support/en-us/help-article/cancel-products-services/cancel-quickbooks-online-subscription-trial/L0MFTXlbw_US_en_US",
+   "https://quickbooks.intuit.com/return_policy/"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "restoro",
+  "name": "Restoro",
+  "category": "security-software",
+  "descriptorPatterns": [
+   "RESTORO"
+  ],
+  "domain": "restoro.com",
+  "cancelUrl": "https://www.restoro.com/cancel-contracts/",
+  "cancelSteps": [
+   "Log into your Restoro account dashboard",
+   "Go to subscription settings and select Cancel Subscription",
+   "If the automated flow fails, submit a ticket at restoro.com/submit-ticket or email support@restoro.com"
+  ],
+  "traps": [
+   "In March 2024 the FTC charged Restoro (with Reimage) with using deceptive fake Windows pop-ups and scan results to scare people into paying for repair services; the companies paid $26 million to settle, and the FTC has been sending consumer refunds since 2025",
+   "To get Restoro's own refund you must run its uninstall wizard and choose Revert changes / Revert and remove Restoro before requesting the refund"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Restoro's own policy offers a refund within 60 days of purchase, but only after completing its uninstall/revert process and submitting a request through support.",
+  "refundUrl": "https://www.restoro.com/refund-policy/",
+  "cancelByEmail": null,
+  "software": [
+   "Restoro"
+  ],
+  "sources": [
+   "https://www.restoro.com/cancel-contracts/",
+   "https://www.restoro.com/refund-policy/",
+   "https://www.ftc.gov/news-events/news/press-releases/2024/03/tech-support-firms-will-pay-26-million-settle-ftc-charges-they-deceived-consumers-buying-repair",
+   "https://www.ftc.gov/enforcement/refunds/restoro-reimage-refunds"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "reimage",
+  "name": "Reimage",
+  "category": "security-software",
+  "descriptorPatterns": [
+   "REIMAGE"
+  ],
+  "domain": "reimageplus.com",
+  "cancelUrl": "https://www.reimageplus.com/",
+  "cancelSteps": [
+   "No self-service web cancel page was found; licenses renew automatically each year",
+   "To cancel, contact support at forwardsupport@reimageplus.com or call 855-432-7277",
+   "To request a refund, first uninstall via Add/Remove Programs, choosing Reimage Repair to undo its changes"
+  ],
+  "traps": [
+   "In March 2024 the FTC charged Reimage (with Restoro) with using deceptive fake Windows pop-ups and scan results to scare people into paying for repair services; the companies paid $26 million to settle, and the FTC has been sending consumer refunds since 2025"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Reimage's stated policy honors refund requests within 60 days of purchase or renewal, but requires uninstalling/reverting the program first and contacting support directly.",
+  "refundUrl": "https://www.reimageplus.com/refund-policy/",
+  "cancelByEmail": "forwardsupport@reimageplus.com",
+  "software": [
+   "Reimage Repair",
+   "Reimage Plus"
+  ],
+  "sources": [
+   "https://www.reimageplus.com/refund-policy/",
+   "https://www.ftc.gov/news-events/news/press-releases/2024/03/tech-support-firms-will-pay-26-million-settle-ftc-charges-they-deceived-consumers-buying-repair",
+   "https://www.ftc.gov/enforcement/refunds/restoro-reimage-refunds"
+  ],
+  "checked": "2026-09-19"
+ },
+ {
+  "provider": "vercel",
+  "name": "Vercel",
+  "category": "developer",
+  "descriptorPatterns": [
+   "VERCEL",
+   "VERCEL INC",
+   "VERCEL.COM"
+  ],
+  "domain": "vercel.com",
+  "cancelUrl": "https://vercel.com/account/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Hobby) / 20 per seat (Pro) / custom (Enterprise)",
+  "notes": "Descriptor is just \"VERCEL\" for the platform plan AND for Vercel Blob/KV usage overage — they land as separate line items but look nearly identical.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "vercel-blob",
+  "name": "Vercel Blob (usage add-on)",
+  "category": "developer",
+  "descriptorPatterns": [
+   "VERCEL BLOB",
+   "VERCEL STORAGE"
+  ],
+  "domain": "vercel.com",
+  "cancelUrl": "https://vercel.com/dashboard/stores",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "usage-based, often $0-15/mo",
+  "notes": "NOT the same as \"VERCEL BLOTO\" (Blotato, below) — easy to misread on a statement. Blob is storage inside your Vercel account; Blotato is an unrelated social-scheduling SaaS.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "blotato",
+  "name": "Blotato",
+  "category": "developer",
+  "descriptorPatterns": [
+   "BLOTATO",
+   "VERCEL BLOTO"
+  ],
+  "domain": "blotato.com",
+  "cancelUrl": "https://blotato.com/settings/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "$25-99/mo",
+  "notes": "Social media auto-posting tool. Descriptor sometimes shows through a Vercel-hosted checkout as \"VERCEL BLOTO...\" — do not confuse with Vercel Blob storage.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "supabase",
+  "name": "Supabase",
+  "category": "developer",
+  "descriptorPatterns": [
+   "SUPABASE"
+  ],
+  "domain": "supabase.com",
+  "cancelUrl": "https://supabase.com/dashboard/org/_/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Free) / 25 per project (Pro) / custom (Team+)",
+  "notes": "Check the dashboard for paused vs active projects; paused projects still bill on Pro tier after the grace period.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "clerk",
+  "name": "Clerk",
+  "category": "developer",
+  "descriptorPatterns": [
+   "CLERK",
+   "CLERK.COM",
+   "CLERK DEV"
+  ],
+  "domain": "clerk.com",
+  "cancelUrl": "https://dashboard.clerk.com/last-active?path=billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (up to 10k MAU) / 25+ (Pro, usage-based above included MAU)",
+  "notes": "Billed per monthly active user above the free tier — a dead app can still show a small charge from stale sessions.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "neon",
+  "name": "Neon (Postgres)",
+  "category": "developer",
+  "descriptorPatterns": [
+   "NEON",
+   "NEON.TECH",
+   "NEONDB"
+  ],
+  "domain": "neon.tech",
+  "cancelUrl": "https://console.neon.tech/app/projects",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Free) / 19+ (Launch) / usage-based compute above that",
+  "notes": "Compute-hour billing — a branch left un-suspended keeps burning hours even with zero application traffic.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "railway",
+  "name": "Railway",
+  "category": "developer",
+  "descriptorPatterns": [
+   "RAILWAY",
+   "RAILWAY.APP",
+   "RAILWAY CORP"
+  ],
+  "domain": "railway.com",
+  "cancelUrl": "https://railway.com/account/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "5 (Hobby base) + usage / 20 (Pro base) + usage",
+  "notes": "Usage-based on top of the base plan fee — a forgotten worker service quietly adds to the usage line even with no traffic.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "cloudflare",
+  "name": "Cloudflare",
+  "category": "developer",
+  "descriptorPatterns": [
+   "CLOUDFLARE",
+   "CLOUDFLARE INC"
+  ],
+  "domain": "cloudflare.com",
+  "cancelUrl": "https://dash.cloudflare.com/?to=/:account/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Free) / 20+ (Pro zone) / R2 + D1 usage-based",
+  "notes": "Most zones are free; a charge usually means a Pro/Business zone plan, Workers paid plan, or R2/D1 usage overage.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "github",
+  "name": "GitHub",
+  "category": "developer",
+  "descriptorPatterns": [
+   "GITHUB",
+   "GITHUB.COM",
+   "GITHUB INC"
+  ],
+  "domain": "github.com",
+  "cancelUrl": "https://github.com/settings/billing/summary",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0-4 (individual Pro/Copilot) / 4-21 per seat (Team/Enterprise + Copilot)",
+  "notes": "Watch for org-level Copilot Business seats assigned to inactive collaborators — they bill per seat, not per usage.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "openai",
+  "name": "OpenAI API",
+  "category": "developer",
+  "descriptorPatterns": [
+   "OPENAI",
+   "OPENAI *API",
+   "OPENAI, LLC"
+  ],
+  "domain": "openai.com",
+  "cancelUrl": "https://platform.openai.com/settings/organization/billing/overview",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "usage-based, prepaid credit or postpaid invoice",
+  "notes": "API usage descriptor is distinct from the consumer ChatGPT Plus/Pro subscription line below — check both if you have a personal and a project account.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "chatgpt",
+  "name": "ChatGPT Plus/Pro/Team",
+  "category": "developer",
+  "descriptorPatterns": [
+   "OPENAI *CHATGPT",
+   "CHATGPT SUBSCRIPTION",
+   "OPENAI CHATGPT"
+  ],
+  "domain": "chatgpt.com",
+  "cancelUrl": "https://chatgpt.com/#settings/Subscription",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "20 (Plus) / 200 (Pro) / 25-30 per seat (Team)",
+  "notes": null,
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "x-premium",
+  "name": "X Premium",
+  "category": "developer",
+  "descriptorPatterns": [
+   "X CORP",
+   "TWITTER PAID",
+   "X PREMIUM",
+   "X.COM PREMIUM",
+   "X.COM"
+  ],
+  "domain": "x.com",
+  "cancelUrl": "https://x.com/settings/premium",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "8 (Basic) / 16-40 (Premium+) monthly, or annual",
+  "notes": "Personal subscription tier — separate billing surface from the X API tiers. A bare \"X.COM\" descriptor is AMBIGUOUS: it can be X Premium OR an X API tier — use the amount to tell them apart ($8-40/mo -> Premium; $100+/mo -> API Basic or higher).",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "x-api",
+  "name": "X API",
+  "category": "developer",
+  "descriptorPatterns": [
+   "X API",
+   "TWITTER API",
+   "X.COM API",
+   "X.COM"
+  ],
+  "domain": "x.com",
+  "cancelUrl": "https://developer.x.com/en/portal/products",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "100 (Basic) / 5000+ (Pro) / custom (Enterprise)",
+  "notes": "The classic \"forgot I upgraded from Free to Basic\" surprise — a $100/mo jump with no warning banner. A bare \"X.COM\" descriptor is AMBIGUOUS with X Premium (like the OPENAI vs OPENAI *CHATGPT split) — $100+/mo means an API tier, $8-40/mo means Premium.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "godaddy",
+  "name": "GoDaddy",
+  "category": "developer",
+  "descriptorPatterns": [
+   "GODADDY",
+   "GODADDY.COM"
+  ],
+  "domain": "godaddy.com",
+  "cancelUrl": "https://account.godaddy.com/products",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "domain renewals 12-25/yr, hosting plans 10-30/mo",
+  "notes": null,
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "twilio",
+  "name": "Twilio",
+  "category": "developer",
+  "descriptorPatterns": [
+   "TWILIO",
+   "TWILIO INC",
+   "TWILIO SENDGRID"
+  ],
+  "domain": "twilio.com",
+  "cancelUrl": "https://console.twilio.com/us1/billing/manage-billing/billing-overview",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "~1.15/mo per US local number + usage-based SMS/voice/verify",
+  "notes": "A provisioned-but-idle phone number is cheap alone ($1-2/mo) but common to accumulate several across test projects.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "runpod",
+  "name": "RunPod",
+  "category": "developer",
+  "descriptorPatterns": [
+   "RUNPOD",
+   "RUNPOD.IO"
+  ],
+  "domain": "runpod.io",
+  "cancelUrl": "https://www.runpod.io/console/user/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "per-second GPU billing, $0.20-$4+/hr depending on GPU class",
+  "notes": "The single most expensive class of forgotten-resource waste in v1's scope — a left-running GPU pod bills continuously with nothing consuming it.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "meshy",
+  "name": "Meshy",
+  "category": "developer",
+  "descriptorPatterns": [
+   "MESHY",
+   "MESHY AI",
+   "MESHY.AI"
+  ],
+  "domain": "meshy.ai",
+  "cancelUrl": "https://www.meshy.ai/settings/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "20-60/mo (credits-based 3D generation)",
+  "notes": "3D asset generation SaaS.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "replicate",
+  "name": "Replicate",
+  "category": "developer",
+  "descriptorPatterns": [
+   "REPLICATE",
+   "REPLICATE.COM"
+  ],
+  "domain": "replicate.com",
+  "cancelUrl": "https://replicate.com/account/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "usage-based, prepaid credit",
+  "notes": "Per-model, per-second compute billing — a model left warm/pinned can bill even between calls on some plans.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "netlify",
+  "name": "Netlify",
+  "category": "developer",
+  "descriptorPatterns": [
+   "NETLIFY",
+   "NETLIFY INC"
+  ],
+  "domain": "netlify.com",
+  "cancelUrl": "https://app.netlify.com/user/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Starter) / 19 per member (Pro) / usage add-ons",
+  "notes": "Common overage: build minutes and bandwidth on abandoned sites still attached to a paid team.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "fly",
+  "name": "Fly.io",
+  "category": "developer",
+  "descriptorPatterns": [
+   "FLY.IO",
+   "FLY IO",
+   "SUPERFLY"
+  ],
+  "domain": "fly.io",
+  "cancelUrl": "https://fly.io/dashboard/personal/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "usage-based compute + volumes, pay-as-you-go",
+  "notes": "Suspended (not destroyed) machines can still hold reserved IPs/volumes that bill.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "heroku",
+  "name": "Heroku",
+  "category": "developer",
+  "descriptorPatterns": [
+   "HEROKU",
+   "HEROKU.COM",
+   "SALESFORCE HEROKU"
+  ],
+  "domain": "heroku.com",
+  "cancelUrl": "https://dashboard.heroku.com/account/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "5-25 per dyno (Eco/Basic/Standard tiers), add-ons extra",
+  "notes": "Classic forgotten-resource platform — check for apps with zero web traffic still on a paid dyno tier.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "render",
+  "name": "Render",
+  "category": "developer",
+  "descriptorPatterns": [
+   "RENDER",
+   "RENDER.COM",
+   "RENDER SERVICES"
+  ],
+  "domain": "render.com",
+  "cancelUrl": "https://dashboard.render.com/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Free, spun down) / 7+ per service (paid tiers)",
+  "notes": "Paid-tier services don't spin down when idle the way free-tier ones do — that's the trap.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "digitalocean",
+  "name": "DigitalOcean",
+  "category": "developer",
+  "descriptorPatterns": [
+   "DIGITALOCEAN",
+   "DIGITAL OCEAN",
+   "DO.CO"
+  ],
+  "domain": "digitalocean.com",
+  "cancelUrl": "https://cloud.digitalocean.com/account/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "4-48+/mo per droplet, managed DB/K8s extra",
+  "notes": "A stopped (not destroyed) droplet still bills for its reserved disk.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "aws",
+  "name": "Amazon Web Services",
+  "category": "developer",
+  "descriptorPatterns": [
+   "AWS",
+   "AMAZON WEB SERVICES",
+   "AMZN AWS"
+  ],
+  "domain": "amazon.com",
+  "cancelUrl": "https://console.aws.amazon.com/billing/home",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "highly variable — from single-digit dollars to thousands",
+  "notes": null,
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "azure",
+  "name": "Microsoft Azure",
+  "category": "developer",
+  "descriptorPatterns": [
+   "AZURE",
+   "MICROSOFT AZURE",
+   "MSFT AZURE"
+  ],
+  "domain": "azure.com",
+  "cancelUrl": "https://portal.azure.com/#blade/Microsoft_Azure_Billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "highly variable, consumption-based",
+  "notes": "Same reasoning as AWS — reconcile against Cost Management + Billing.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "resend",
+  "name": "Resend",
+  "category": "developer",
+  "descriptorPatterns": [
+   "RESEND",
+   "RESEND.COM"
+  ],
+  "domain": "resend.com",
+  "cancelUrl": "https://resend.com/settings/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Free, 3k/mo) / 20+ (Pro)",
+  "notes": "A verified sending domain left attached after a project sunset is the common forgotten-charge shape here.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "groq",
+  "name": "Groq",
+  "category": "developer",
+  "descriptorPatterns": [
+   "GROQ",
+   "GROQCLOUD"
+  ],
+  "domain": "groq.com",
+  "cancelUrl": "https://console.groq.com/settings/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "usage-based token pricing, prepaid credit",
+  "notes": "Low per-token cost usually means small charges — worth checking a stale key isn't still being called by an old cron.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "anthropic",
+  "name": "Anthropic",
+  "category": "developer",
+  "descriptorPatterns": [
+   "ANTHROPIC",
+   "ANTHROPIC PBC",
+   "CLAUDE.AI"
+  ],
+  "domain": "anthropic.com",
+  "cancelUrl": "https://console.anthropic.com/settings/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "usage-based API + 20 (Pro) / 200 (Max) consumer plans",
+  "notes": null,
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "stripe",
+  "name": "Stripe",
+  "category": "developer",
+  "descriptorPatterns": [
+   "STRIPE",
+   "STRIPE.COM"
+  ],
+  "domain": "stripe.com",
+  "cancelUrl": "https://dashboard.stripe.com/settings/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "processing fees, not a flat subscription (2.9% + 30c typical)",
+  "notes": "Rarely a \"forgotten\" charge since it's transaction-linked, but Radar/Billing add-ons and unused Terminal readers can bill flat fees.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "notion",
+  "name": "Notion",
+  "category": "developer",
+  "descriptorPatterns": [
+   "NOTION",
+   "NOTION LABS"
+  ],
+  "domain": "notion.so",
+  "cancelUrl": "https://www.notion.so/my-integrations",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Free) / 8-15 per seat (Plus/Business)",
+  "notes": "Per-seat billing on Business plans is the usual waste vector — check for seats assigned to people who've left.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "figma",
+  "name": "Figma",
+  "category": "developer",
+  "descriptorPatterns": [
+   "FIGMA",
+   "FIGMA INC"
+  ],
+  "domain": "figma.com",
+  "cancelUrl": "https://www.figma.com/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Starter) / 12-15 per editor seat (Professional/Organization)",
+  "notes": "Editor seats (not viewer seats) are billed — downgrading unused editors to viewers is the quick win.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "linear",
+  "name": "Linear",
+  "category": "developer",
+  "descriptorPatterns": [
+   "LINEAR",
+   "LINEAR.APP"
+  ],
+  "domain": "linear.app",
+  "cancelUrl": "https://linear.app/settings/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Free) / 8-14 per seat (Basic/Business)",
+  "notes": "Per-seat billing — check for seats on workspaces no team actually uses anymore.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "slack",
+  "name": "Slack",
+  "category": "developer",
+  "descriptorPatterns": [
+   "SLACK",
+   "SLACK TECHNOLOGIES"
+  ],
+  "domain": "slack.com",
+  "cancelUrl": "https://my.slack.com/plans",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "7-15 per active user (Pro/Business+)",
+  "notes": "Bills per active user monthly — a workspace nobody posts in anymore is a clean cancel.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "zoom",
+  "name": "Zoom",
+  "category": "developer",
+  "descriptorPatterns": [
+   "ZOOM.US",
+   "ZOOM VIDEO"
+  ],
+  "domain": "zoom.us",
+  "cancelUrl": "https://zoom.us/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "13-20 per host license",
+  "notes": "Common waste: a Pro host license nobody schedules meetings under anymore (client calls moved to a client's own Zoom).",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "1password",
+  "name": "1Password",
+  "category": "developer",
+  "descriptorPatterns": [
+   "1PASSWORD",
+   "AGILEBITS"
+  ],
+  "domain": "1password.com",
+  "cancelUrl": "https://my.1password.com/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "3-8 per seat",
+  "notes": "Low per-seat cost but easy to accumulate stale seats on a Teams/Business plan.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "namecheap",
+  "name": "Namecheap",
+  "category": "developer",
+  "descriptorPatterns": [
+   "NAMECHEAP",
+   "NAMECHEAP.COM"
+  ],
+  "domain": "namecheap.com",
+  "cancelUrl": "https://ap.www.namecheap.com/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "domain renewals 9-25/yr, hosting extra",
+  "notes": null,
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "google-workspace",
+  "name": "Google Workspace",
+  "category": "developer",
+  "descriptorPatterns": [
+   "GOOGLE WORKSPACE",
+   "GOOGLE *GSUITE",
+   "GOOGLE GSUITE"
+  ],
+  "domain": "google.com",
+  "cancelUrl": "https://admin.google.com/ac/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "6-18 per user",
+  "notes": "Per-user billing — check the admin console for suspended/unused mailboxes still on a paid tier.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "sentry",
+  "name": "Sentry",
+  "category": "developer",
+  "descriptorPatterns": [
+   "SENTRY",
+   "FUNCTIONAL SOFTWARE"
+  ],
+  "domain": "sentry.io",
+  "cancelUrl": "https://sentry.io/settings/billing/",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (Developer) / 26+ (Team, usage-based events)",
+  "notes": "Event-volume overage on a project that's been decommissioned is the classic finding here.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "datadog",
+  "name": "Datadog",
+  "category": "developer",
+  "descriptorPatterns": [
+   "DATADOG",
+   "DATADOG INC"
+  ],
+  "domain": "datadoghq.com",
+  "cancelUrl": "https://app.datadoghq.com/billing/plan",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "highly variable — per-host, per-log-GB, per-custom-metric",
+  "notes": "Host-based billing continues even for a host that's been terminated until the agent stops reporting.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "elevenlabs",
+  "name": "ElevenLabs",
+  "category": "developer",
+  "descriptorPatterns": [
+   "ELEVENLABS",
+   "ELEVEN LABS",
+   "ELEVENLABS.IO"
+  ],
+  "domain": "elevenlabs.io",
+  "cancelUrl": "https://elevenlabs.io/app/settings/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "0 (free, 10k chars) / 5 (Starter) / 22 (Creator) / 99 (Pro)",
+  "notes": "CHECK THE VOICE PATH BEFORE ASSUMING THIS IS NEEDED. SignalWire's AI runtime carries the ElevenLabs voice catalog NATIVELY as a voice string (elevenlabs.<name>:<model>) with no ElevenLabs account, key or vendor relationship — so a phone/voice product can sound like ElevenLabs while paying nothing to them. A paid plan here is only load-bearing for direct TTS/agents in the ElevenLabs workspace itself. Non-use evidence: agents_list returning zero agents plus zero character consumption. Custom/cloned voices do NOT resolve through the SignalWire catalog — that is the one case the paid account is genuinely required.",
+  "sources": [],
+  "checked": "2026-07-18"
+ },
+ {
+  "provider": "signalwire",
+  "name": "SignalWire",
+  "category": "developer",
+  "descriptorPatterns": [
+   "SIGNALWIRE",
+   "SIGNAL WIRE"
+  ],
+  "domain": null,
+  "cancelUrl": "https://<space>.signalwire.com/billing",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "refundUrl": null,
+  "cancelByEmail": null,
+  "software": [],
+  "typicalPriceRange": "usage-based, funded by top-ups (10 minimum increment); ~0.60-1.00/mo per retained phone number plus per-minute",
+  "notes": "Balance top-up, not a subscription — a 10.00 charge is the minimum increment, not a plan fee. The recurring cost that hides here is RETAINED PHONE NUMBERS: a number keeps billing monthly after the product it served is retired, and releasing it is the saving.",
+  "sources": [],
+  "checked": "2026-07-18"
+ }
+]
