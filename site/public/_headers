@@ -4,3 +4,4 @@
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
   Strict-Transport-Security: max-age=31536000
+  Cache-Control: public, max-age=300, no-transform
