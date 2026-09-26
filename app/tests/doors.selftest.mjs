@@ -285,12 +285,14 @@ export function checkFabricatedNames(names) {
 
 // -- doors.leftovers --
 {
-  check("E6a no findings -> none, deleteAllowed false", summarizeLeftovers({ findingsCount: 0 }).verdict === "none" && summarizeLeftovers({ findingsCount: 0 }).deleteAllowed === false);
+  check("E6a a scan ran and found nothing -> none, deleteAllowed false", summarizeLeftovers({ findingsCount: 0, quickScanEndTime: "2026-01-05" }).verdict === "none" && summarizeLeftovers({ findingsCount: 0, quickScanEndTime: "2026-01-05" }).deleteAllowed === false);
   check("E6b findings + no scan evidence + step not done -> deleteAllowed false", summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10", quickScanEndTime: "2026-01-05", folderScanStepDone: false }).deleteAllowed === false);
   { const r = summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10", fullScanEndTime: "2026-01-15" }); check("E6c a scan end time after the newest arrival -> unlocked by evidence", r.deleteAllowed === true && r.unlockedBy === "evidence"); }
   { const r = summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10", quickScanEndTime: "2026-01-05", folderScanStepDone: true }); check("E6d scan before arrival + step done -> unlocked by your word", r.deleteAllowed === true && r.unlockedBy === "your-word"); }
-  check("E6e no scan yet -> not_checked", summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10" }).verdict === "not_checked");
+  check("E6e findings present but no scan timestamp yet -> not_checked", summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10" }).verdict === "not_checked");
   check("E6f deleting is never allowed before the gate opens, regardless of findings count", summarizeLeftovers({ findingsCount: 50 }).deleteAllowed === false);
+  { const r = summarizeLeftovers({ findingsCount: 0 }); check("E6g never scanned at all (findingsCount defaults to 0, no scan timestamps) -> not_checked, NEVER the clean-looking 'none'", r.verdict === "not_checked" && r.deleteAllowed === false); }
+  { const r = summarizeLeftovers({}); check("E6h no arguments at all (freshest possible PC) -> not_checked, not 'none'", r.verdict === "not_checked" && r.deleteAllowed === false); }
 }
 
 // -- power.suddenShutdowns (engineChecks fixtures a-f) --

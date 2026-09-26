@@ -256,8 +256,15 @@ if ($Pass -eq 'quick') {
     $videoConLock = Get-PowerIndex $active $SUB_VIDEO $VIDEOCONLOCK
     $model = ''
     try { $model = (powercfg /a | Out-String) } catch {}
+    # Scoped to just the two subgroups this Section already reads from the registry (sleep,
+    # video) - an unscoped `powercfg /qh` dumps every hidden setting for the whole active
+    # scheme (~80KB, up to ~17.5s on a loaded box) and was the quick pass's own D2 budget flake.
     $qh = ''
-    try { $qh = (powercfg /qh | Out-String) } catch {}
+    try {
+      if ($active) {
+        $qh = ((powercfg /qh $active $SUB_SLEEP | Out-String) + (powercfg /qh $active $SUB_VIDEO | Out-String))
+      }
+    } catch {}
     $modelListed = [bool]($model -match 'S0 Low Power Idle' -or $model -match 'Standby \(S1')
     $registryOk = [bool]($standby -or $videoIdle)
     [pscustomobject]@{

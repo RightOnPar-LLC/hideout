@@ -133,13 +133,17 @@ export function summarizeLeftovers({
   fullScanEndTime = "",
   folderScanStepDone = false,
 } = {}) {
-  if (findingsCount === 0) return { verdict: "none", deleteAllowed: false };
+  // "No scan has ever run" must be checked BEFORE "no findings" - a never-scanned PC has
+  // findingsCount default to 0 with no scan timestamps at all, and that is the "not_checked"
+  // case, not the clean-looking "none" one (findingsCount:0 only means "none" once a scan
+  // actually ran and found nothing).
   const scanEnds = [quickScanEndTime, fullScanEndTime].filter(Boolean).sort();
-  const latestScanEnd = scanEnds.length ? scanEnds[scanEnds.length - 1] : null;
+  if (scanEnds.length === 0) return { verdict: "not_checked", deleteAllowed: false };
+  if (findingsCount === 0) return { verdict: "none", deleteAllowed: false };
+  const latestScanEnd = scanEnds[scanEnds.length - 1];
   const evidenceUnlocks = !!(latestScanEnd && newestFindingArrivedAt && latestScanEnd > newestFindingArrivedAt);
   if (evidenceUnlocks) return { verdict: "clear-to-delete-by-evidence", deleteAllowed: true, unlockedBy: "evidence" };
   if (folderScanStepDone) return { verdict: "clear-to-delete-by-your-word", deleteAllowed: true, unlockedBy: "your-word" };
-  if (!quickScanEndTime && !fullScanEndTime) return { verdict: "not_checked", deleteAllowed: false };
   return { verdict: "flagged", deleteAllowed: false, findingsCount };
 }
 
