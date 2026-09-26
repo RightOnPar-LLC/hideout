@@ -56,6 +56,18 @@ function Get-Sha([string]$path) {
   if (-not $path -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { return '' }
   try { return (Get-FileHash -LiteralPath $path -Algorithm SHA256 -ErrorAction Stop).Hash } catch { return 'unreadable' }
 }
+# Windows PowerShell 5.1's ConvertTo-Json renders a bare DateTime as the string
+# "\/Date(...)\/", never a clean timestamp (measured this session) - Iso() is the one place
+# every date in this report passes through, so a consumer can always match ^\d{4}-\d{2}-\d{2}T
+# or treat '' as "no date". A MinValue / 1601 date (never set) also becomes ''.
+function Iso($d) {
+  if (-not $d) { return '' }
+  try {
+    $v = $d -as [DateTime]
+    if ($v -and $v.Year -gt 1601) { return $v.ToString('s') }
+  } catch {}
+  return ''
+}
 function Get-ProgramPath([string]$cmd) {
   if (-not $cmd) { return $null }
   $c = [Environment]::ExpandEnvironmentVariables($cmd.Trim())
@@ -234,13 +246,32 @@ Section 'defender' {
   $p = Get-MpPreference
   [pscustomobject]@{
     type = 'status'; realtime = $m.RealTimeProtectionEnabled; antivirus = $m.AntivirusEnabled; tamperProtected = $m.IsTamperProtected
-    signatureAgeDays = $m.AntivirusSignatureAge; lastQuick = "$($m.QuickScanEndTime)"; lastFull = "$($m.FullScanEndTime)"
+    signatureAgeDays = $m.AntivirusSignatureAge; lastQuick = Iso($m.QuickScanEndTime); lastFull = Iso($m.FullScanEndTime)
     disableRealtime = $p.DisableRealtimeMonitoring; disableBehavior = $p.DisableBehaviorMonitoring; disableIOAV = $p.DisableIOAVProtection
     exclusionPaths = @($p.ExclusionPath); exclusionProcesses = @($p.ExclusionProcess); exclusionExtensions = @($p.ExclusionExtension); exclusionIPs = @($p.ExclusionIpAddress)
   }
-  foreach ($d in (Get-MpThreatDetection)) { [pscustomobject]@{ type = 'detection'; when = "$($d.InitialDetectionTime)"; threatId = $d.ThreatID; resources = @($d.Resources); actionSuccess = $d.ActionSuccess } }
+  foreach ($d in (Get-MpThreatDetection)) { [pscustomobject]@{ type = 'detection'; when = Iso($d.InitialDetectionTime); threatId = $d.ThreatID; resources = @($d.Resources); actionSuccess = $d.ActionSuccess } }
   foreach ($t in (Get-MpThreat)) { [pscustomobject]@{ type = 'threat'; name = $t.ThreatName; severity = $t.SeverityID; active = $t.IsActive; resources = @($t.Resources) } }
 }
+
+# Doors & power's authoritative disk-encryption reading, once elevated: ONLY the fields the
+# person's own recovery ladder needs, and NEVER the KeyProtector objects themselves - one of
+# their properties holds the 48-digit recovery key in plain text, and ConvertTo-Json -Depth 8
+# at the bottom of this file would otherwise write it straight into %LOCALAPPDATA%\Hideout\
+# hunts. Only the KeyProtector TYPES are kept below. A named function (not inline in the
+# Section body) so the engine selftest can run this exact shaping against a fixture object
+# and prove no key-shaped string survives it, with a negative control that proves the same
+# test goes red when the shaping is skipped.
+function Get-BitlockerShape($volumes) {
+  foreach ($v in @($volumes)) {
+    [pscustomobject]@{
+      mountPoint = "$($v.MountPoint)"; volumeStatus = "$($v.VolumeStatus)"; protectionStatus = "$($v.ProtectionStatus)"
+      encryptionPercentage = $v.EncryptionPercentage
+      keyProtectorTypes = @($v.KeyProtector | ForEach-Object { "$($_.KeyProtectorType)" })
+    }
+  }
+}
+Section 'bitlocker' { Get-BitlockerShape (Get-BitLockerVolume) }
 
 Section 'rootCertificates' {
   foreach ($store in 'Cert:\LocalMachine\Root', 'Cert:\CurrentUser\Root', 'Cert:\LocalMachine\AuthRoot') {

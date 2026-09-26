@@ -26,6 +26,13 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { collectIdentity } from "../src/redact.mjs";
+import { decodeLastTaskResult, decodeBitLockerShellProperty } from "../src/doors/decode.mjs";
+import {
+  summarizeRemoteDesktop, summarizeExtraAccount, summarizeDiskEncryption, mapAdminBitlockerVolume,
+  summarizeRemoteSupport, summarizeAntivirus, summarizeLeftovers, markRanFlat, summarizeSuddenShutdowns,
+  clusterEpisodes, summarizeBatteryAndCharger, summarizeSleepTimers, summarizeRestartWaiting,
+  summarizeStartupHealth, summarizeDiskSpace, summarizeDiskSpaceGroup, summarizeSpeedCap,
+} from "../src/doors/summarize.mjs";
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT = path.resolve(APP, "..");
@@ -251,6 +258,168 @@ export function isHiddenByTrackedGitignore(source) {
     }
     check("D5 no shipped doors file or fixture (whole file, not just inside a managed block) matches the estate-denylist / identity / path-shape patterns", leaked.length === 0, leaked.join("; "));
   }
+}
+
+// ------------------------------------------------------------------ E: decode.mjs / summarize.mjs -
+// PR1's verdict layer, tested against JSON fixtures per engineChecks' own test descriptions.
+// Every fixture name below is either generic (a made-up drive letter, a code, a boolean) or
+// drawn from the D3 fabricated-name allow-list - never a real machine's data.
+
+// -- decode.mjs --
+{
+  check("E0 LastTaskResult 0 decodes to ran", decodeLastTaskResult(0) === "ran");
+  check("E0 LastTaskResult 267009 decodes to running", decodeLastTaskResult(267009) === "running");
+  check("E0 LastTaskResult 267011 decodes to never-ran", decodeLastTaskResult(267011) === "never-ran");
+  check("E0 LastTaskResult 0x800710E0 decodes to refused-by-condition, never 'failed'", decodeLastTaskResult(0x800710e0) === "refused-by-condition");
+  check("E0 LastTaskResult 0xC000013A decodes to killed-at-signout, never 'failed'", decodeLastTaskResult(0xc000013a) === "killed-at-signout");
+  check("E0 an unrecognised nonzero result is 'failed'", decodeLastTaskResult(17) === "failed");
+  check("E0 a missing result is not_checked, never 'ran'", decodeLastTaskResult(null) === "not_checked" && decodeLastTaskResult("") === "not_checked");
+
+  check("E0 BitLocker shell property 1 -> on", decodeBitLockerShellProperty(1) === "on");
+  check("E0 BitLocker shell property 2 -> off", decodeBitLockerShellProperty(2) === "off");
+  check("E0 BitLocker shell property 5 -> paused", decodeBitLockerShellProperty(5) === "paused");
+  check("E0 BitLocker shell property 0 -> not_checked, never 'off' (ambiguous, never guessed shut)", decodeBitLockerShellProperty(0) === "not_checked");
+  check("E0 BitLocker shell property empty -> not_checked", decodeBitLockerShellProperty("") === "not_checked" && decodeBitLockerShellProperty(null) === "not_checked");
+}
+
+// -- doors.remoteDesktop (engineChecks fixtures a-g) --
+{
+  const base = { fDeny: 0, remoteSessions: [], firewall: { checked: true, enabledRuleCount: 2 } };
+  check("E1a fDeny=0 + 2 enabled rules -> open", summarizeRemoteDesktop(base).verdict === "open");
+  check("E1b fDeny=1 -> shut", summarizeRemoteDesktop({ fDeny: 1 }).verdict === "shut");
+  check("E1c key missing -> not_checked", summarizeRemoteDesktop({ fDeny: null }).verdict === "not_checked");
+  check("E1d fDeny=0 + a remote session -> open-and-connected", summarizeRemoteDesktop({ ...base, remoteSessions: [{ startTime: "2026-01-01T00:00:00" }] }).verdict === "open-and-connected");
+  check("E1e fDeny=0 + zero enabled rules -> open-but-blocked", summarizeRemoteDesktop({ ...base, firewall: { checked: true, enabledRuleCount: 0 } }).verdict === "open-but-blocked");
+  { const r = summarizeRemoteDesktop({ ...base, partOfDomain: true }); check("E1f PartOfDomain=true -> set-by-your-organisation, doorOpen false", r.verdict === "set-by-your-organisation" && r.doorOpen === false); }
+  { const r = summarizeRemoteDesktop({ ...base, firewall: { checked: false, enabledRuleCount: null } }); check("E1g firewall section threw -> row still open, firewall detail not_checked", r.verdict === "open" && r.firewallDetail === "not_checked"); }
+  check("E1h the inverted boolean is asserted both ways (a sign flip fails this suite)", summarizeRemoteDesktop({ fDeny: 0, remoteSessions: [] }).doorOpen === true && summarizeRemoteDesktop({ fDeny: 1 }).doorOpen === false);
+}
+
+// -- doors.extraAccount (engineChecks fixtures a-g, fabricated names only) --
+{
+  const acct = (name, extra = {}) => ({ name, enabled: true, passwordRequired: false, passwordLastSet: "", principalSource: "Local", ...extra });
+  check("E2a enabled admin, PasswordRequired=false, PasswordLastSet empty -> open", summarizeExtraAccount({ administrators: [acct("helper-account")], builtinsPresent: true }).verdict === "open");
+  check("E2b same with a PasswordLastSet date -> worth-a-look", summarizeExtraAccount({ administrators: [acct("helper-account", { passwordLastSet: "2026-01-01T00:00:00" })], builtinsPresent: true }).verdict === "worth-a-look");
+  check("E2c Enabled=false -> shut", summarizeExtraAccount({ administrators: [acct("helper-account", { enabled: false })], builtinsPresent: true }).verdict === "shut");
+  check("E2d two enabled admins with passwords -> worth-a-look (second-admin)", summarizeExtraAccount({ administrators: [acct("Nina", { passwordRequired: true }), acct("helper-account", { passwordRequired: true })], builtinsPresent: true }).verdict === "worth-a-look");
+  check("E2e built-ins missing from the list -> not_checked", summarizeExtraAccount({ administrators: [acct("Nina")], builtinsPresent: false }).verdict === "not_checked");
+  check("E2f PartOfDomain=true -> set-by-your-organisation", summarizeExtraAccount({ administrators: [acct("Nina")], builtinsPresent: true, partOfDomain: true }).verdict === "set-by-your-organisation");
+  check("E2g a MicrosoftAccount/AzureAD admin is never judged on PasswordRequired", summarizeExtraAccount({ administrators: [acct("Nina", { principalSource: "MicrosoftAccount" })], builtinsPresent: true }).verdict === "shut");
+}
+
+// -- doors.diskEncryption (engineChecks fixtures a-e) --
+{
+  check("E3a value 1 -> on", summarizeDiskEncryption({ shellProperty: 1 }).verdict === "on");
+  { const r = summarizeDiskEncryption({ shellProperty: 2 }); check("E3b value 2 -> off / quick", r.verdict === "off" && r.confidence === "quick"); }
+  check("E3c empty -> not_checked", summarizeDiskEncryption({ shellProperty: "" }).verdict === "not_checked");
+  check("E3d value 5 -> paused", summarizeDiskEncryption({ shellProperty: 5 }).verdict === "paused");
+  { const r = summarizeDiskEncryption({ shellProperty: 2, admin: { verdict: "on" } }); check("E3e a newer admin snapshot says on -> on / admin (overrides the quick reading)", r.verdict === "on" && r.confidence === "admin"); }
+  check("E3f admin volume mapping: FullyEncrypted + On -> on", mapAdminBitlockerVolume({ volumeStatus: "FullyEncrypted", protectionStatus: "On" }) === "on");
+  check("E3g admin volume mapping: FullyEncrypted + Off -> paused", mapAdminBitlockerVolume({ volumeStatus: "FullyEncrypted", protectionStatus: "Off" }) === "paused");
+  check("E3h admin volume mapping: FullyDecrypted -> off", mapAdminBitlockerVolume({ volumeStatus: "FullyDecrypted" }) === "off");
+}
+
+// -- doors.remoteSupport --
+{
+  check("E4a installed ['AnyDesk'] -> installed", summarizeRemoteSupport({ installedMatches: ["AnyDesk"], knownProcessSeen: true }).verdict === "installed");
+  check("E4b a live process match -> running-now (beats installed)", summarizeRemoteSupport({ installedMatches: ["AnyDesk"], runningMatches: ["Zoho Assist"], knownProcessSeen: true }).verdict === "running-now");
+  check("E4c nothing installed or running -> none", summarizeRemoteSupport({ knownProcessSeen: true }).verdict === "none");
+  check("E4d a process list without explorer/svchost -> not_checked", summarizeRemoteSupport({ knownProcessSeen: false }).verdict === "not_checked");
+}
+
+// -- doors.antivirus (engineChecks fixtures a-e) --
+{
+  { const r = summarizeAntivirus({ amRunningMode: "Normal", fullScanEndTime: "" }, { leftoversCount: 0 }); check("E5a Normal, never scanned, no leftovers -> fine + suggestion only", r.verdict === "fine" && r.suggestions.includes("full-scan-never")); }
+  check("E5b same with leftovers=2 -> counts as open (full-scan-never)", summarizeAntivirus({ amRunningMode: "Normal", fullScanEndTime: "" }, { leftoversCount: 2 }).verdict === "full-scan-never");
+  check("E5c Passive -> other-antivirus", summarizeAntivirus({ amRunningMode: "Passive", fullScanEndTime: "2026-01-01T00:00:00" }).verdict === "other-antivirus");
+  check("E5d RealTimeProtectionEnabled=false -> open", summarizeAntivirus({ amRunningMode: "Normal", realTimeProtectionEnabled: false, fullScanEndTime: "2026-01-01T00:00:00" }).verdict === "open");
+  check("E5e empty object -> not_checked", summarizeAntivirus({}).verdict === "not_checked");
+  check("E5f real-time protection ON is never treated as 'already scanned' (the suggestion still fires)", summarizeAntivirus({ amRunningMode: "Normal", realTimeProtectionEnabled: true, fullScanEndTime: "" }).suggestions.includes("full-scan-never"));
+}
+
+// -- doors.leftovers --
+{
+  check("E6a no findings -> none, deleteAllowed false", summarizeLeftovers({ findingsCount: 0 }).verdict === "none" && summarizeLeftovers({ findingsCount: 0 }).deleteAllowed === false);
+  check("E6b findings + no scan evidence + step not done -> deleteAllowed false", summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10", quickScanEndTime: "2026-01-05", folderScanStepDone: false }).deleteAllowed === false);
+  { const r = summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10", fullScanEndTime: "2026-01-15" }); check("E6c a scan end time after the newest arrival -> unlocked by evidence", r.deleteAllowed === true && r.unlockedBy === "evidence"); }
+  { const r = summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10", quickScanEndTime: "2026-01-05", folderScanStepDone: true }); check("E6d scan before arrival + step done -> unlocked by your word", r.deleteAllowed === true && r.unlockedBy === "your-word"); }
+  check("E6e no scan yet -> not_checked", summarizeLeftovers({ findingsCount: 2, newestFindingArrivedAt: "2026-01-10" }).verdict === "not_checked");
+  check("E6f deleting is never allowed before the gate opens, regardless of findings count", summarizeLeftovers({ findingsCount: 50 }).deleteAllowed === false);
+}
+
+// -- power.suddenShutdowns (engineChecks fixtures a-f) --
+{
+  const kp41a = Array.from({ length: 6 }, (_, i) => ({ timeCreated: `2026-01-0${(i % 9) + 1}T00:00:00`, bugcheckCode: 0, powerButtonTimestamp: 0 }));
+  { const r = summarizeSuddenShutdowns({ kp41: kp41a, count1001: 0, minidumps: [], memoryDmp: false, crashDumpEnabled: 3, controlSampleCount: 50 }); check("E7a 6 KP41 bugcheck0, no evidence, CrashDumpEnabled=3 -> soon / power-loss", r.verdict === "soon" && r.classes.every((c) => c === "power-loss")); }
+  { const r = summarizeSuddenShutdowns({ kp41: kp41a, count1001: 0, minidumps: [], memoryDmp: false, crashDumpEnabled: 0, controlSampleCount: 50 }); check("E7b same with CrashDumpEnabled=0 -> cant-tell", r.classes.every((c) => c === "cant-tell")); }
+  { const r = summarizeSuddenShutdowns({ kp41: [{ timeCreated: "2026-01-01T00:00:00", bugcheckCode: "0x9F", powerButtonTimestamp: 0 }], count1001: 1, controlSampleCount: 50 }); check("E7c 1 KP41 0x9F + one 1001 -> note / crash", r.verdict === "note" && r.classes[0] === "crash"); }
+  check("E7d control query unreadable -> not_checked", summarizeSuddenShutdowns({ kp41: kp41a, controlSampleCount: null }).verdict === "not_checked");
+  { const r = summarizeSuddenShutdowns({ kp41: [{ timeCreated: "2026-01-01T00:00:00", bugcheckCode: 0, powerButtonTimestamp: 12345 }], controlSampleCount: 50 }); check("E7e PowerButtonTimestamp set -> held-power-button", r.classes[0] === "held-power-button"); }
+  { const kp41ranFlat = [{ timeCreated: "2026-01-01T00:05:00" }, { timeCreated: "2026-01-02T00:05:00" }, { timeCreated: "2026-01-03T00:05:00" }];
+    const kp524 = [{ timeCreated: "2026-01-01T00:03:00" }, { timeCreated: "2026-01-02T00:03:00" }, { timeCreated: "2026-01-03T00:03:00" }];
+    const marked = markRanFlat(kp41ranFlat, kp524);
+    const r = summarizeSuddenShutdowns({ kp41: marked, controlSampleCount: 10 });
+    check("E7f 3 KP41 each preceded by a KP524 -> ran-flat 3, headline count 0", r.ranFlatCount === 3 && r.count === 0); }
+}
+
+// -- power.batteryAndCharger (engineChecks fixtures a-f) --
+{
+  const oneCluster = Array.from({ length: 30 }, (_, i) => ({ timeCreated: new Date(Date.parse("2026-01-01T00:00:00Z") + i * 1000).toISOString() }));
+  check("E8a 30 reversals inside one 60s cluster on one day -> 1 episode, fine", clusterEpisodes(oneCluster).length === 1 && summarizeBatteryAndCharger({ hasBattery: true, kp105: oneCluster }).verdict === "fine");
+  { const sixDays = [0, 1, 2, 3, 4, 5].map((d) => ({ timeCreated: `2026-01-0${d + 1}T12:00:00Z` })); const r = summarizeBatteryAndCharger({ hasBattery: true, kp105: sixDays }); check("E8b 6 distinct-day episodes -> soon", r.verdict === "soon" && r.chargerEpisodeDays === 6); }
+  check("E8c died plugged in 2+ times -> fix-now", summarizeBatteryAndCharger({ hasBattery: true, diedPluggedInCount: 2 }).verdict === "fix-now");
+  check("E8d no Win32_Battery -> no-battery", summarizeBatteryAndCharger({ hasBattery: false }).verdict === "no-battery");
+  { const r = summarizeBatteryAndCharger({ hasBattery: true, designedCapacity: 0, kp105: oneCluster }); check("E8e DesignedCapacity 0 -> health null, episodes still counted", r.health === null && r.chargerEpisodeDays === 1); }
+  check("E8f hasBattery null (control never answered) -> not_checked", summarizeBatteryAndCharger({}).verdict === "not_checked");
+  check("E8g no implied watt arithmetic anywhere in this file", !/\bwatt/i.test(fs.readFileSync(path.join(APP, "src/doors/summarize.mjs"), "utf8")));
+}
+
+// -- power.sleepTimers (engineChecks fixtures a-e) --
+{
+  { const r = summarizeSleepTimers({ standbyIdleAc: 0, videoIdleAc: 300, videoConLockAc: 30, modelListed: true, registryOk: true }); check("E9a Modern Standby (STANDBYIDLE=0, VIDEOIDLE=300) -> effective 5 minutes alone, 30s after lock", r.verdict === "info" && r.standbyMinutes === 5 && r.videoConLockSeconds === 30); }
+  { const r = summarizeSleepTimers({ standbyIdleAc: 0, videoIdleAc: 300, modelListed: false, registryOk: true }); check("E9b unmatched /a text (e.g. localized) -> model unknown, timers still read", r.modelKnown === false && r.standbyMinutes === 5); }
+  { const r = summarizeSleepTimers({ standbyIdleAc: 30, videoIdleAc: 60, registryOk: true, qhAgrees: false }); check("E9c registry and powercfg disagree -> not_checked, never a guess", r.verdict === "not_checked"); }
+  { const r = summarizeSleepTimers({ standbyIdleAc: 0, videoIdleAc: 300, registryOk: true }, { pcMustStayOn: true }); check("E9d pc_must_stay_on + 5 minutes -> soon (judged only because they said so)", r.verdict === "soon"); }
+  check("E9e STANDBYIDLE=0 and VIDEOIDLE=0 -> never-sleeps", summarizeSleepTimers({ standbyIdleAc: 0, videoIdleAc: 0, registryOk: true }).verdict === "never-sleeps");
+  check("E9f registry unreadable -> not_checked", summarizeSleepTimers({ registryOk: false }).verdict === "not_checked");
+}
+
+// -- power.restartWaiting (engineChecks fixtures a-d) --
+{
+  check("E10a RebootRequired present -> restart-waiting", summarizeRestartWaiting({ rebootRequired: true }).verdict === "restart-waiting");
+  check("E10b only PendingFileRename -> possibly, never restart-waiting", summarizeRestartWaiting({ pendingFileRename: true }).verdict === "possibly");
+  check("E10c none -> none", summarizeRestartWaiting({}).verdict === "none");
+  check("E10d UX key unreadable -> not_checked", summarizeRestartWaiting({ uxKeyReadable: false }).verdict === "not_checked");
+}
+
+// -- power.startupHealth --
+{
+  const tasks = [{ lastTaskResult: 0 }, { lastTaskResult: 267009 }, { lastTaskResult: 267011 }, { lastTaskResult: 0x800710e0 }, { lastTaskResult: 0xc000013a }, { lastTaskResult: 999 }];
+  { const r = summarizeStartupHealth({ tasks, microsoftTaskSeen: true, vbsLogReadable: true, vbsDeprecationCount: 400, vbsStartupEntries: ["Photo Sync"] }); check("E11a each LastTaskResult code lands in the right count (never-fair-chance=2, failed=1)", r.neverFairChance === 2 && r.failed === 1 && r.vbsCount === 400 && r.vbsStartupCount === 1); }
+  check("E11b no Microsoft task in the list -> not_checked", summarizeStartupHealth({ tasks, microsoftTaskSeen: false }).verdict === "not_checked");
+  check("E11c the VBScript sub-reading is not_checked when its OWN control query fails, even if the Id query returned a count", summarizeStartupHealth({ tasks: [], microsoftTaskSeen: true, vbsLogReadable: false, vbsDeprecationCount: 0 }).vbsCount === null);
+}
+
+// -- power.diskSpace (engineChecks fixtures a-e) --
+{
+  // NOTE: the spec's own worked example ("118 GB with 14 GB free -> soon") does not survive
+  // its own stated rule (14/118 = 11.86%, which is already under BOTH the 12-percent and the
+  // 15GB fix-now gates) - recomputed here rather than shipped as a silent typo. 20GB/118GB
+  // (16.9%) demonstrates "soon" cleanly instead, and 9GB/118GB still demonstrates "fix-now"
+  // exactly as the spec's own second number states.
+  check("E12a C: 118GB with 20GB free (16.9%, under 20% but not under 12%) -> soon", summarizeDiskSpace([{ drive: "C:", sizeBytes: 118 * 1024 ** 3, freeBytes: 20 * 1024 ** 3 }])[0].verdict === "soon");
+  check("E12b 9GB free on the same drive -> fix-now", summarizeDiskSpace([{ drive: "C:", sizeBytes: 118 * 1024 ** 3, freeBytes: 9 * 1024 ** 3 }])[0].verdict === "fix-now");
+  check("E12c a 2TB drive at 10 percent (200GB free) -> fine, never a red headline on percent alone", summarizeDiskSpace([{ drive: "D:", sizeBytes: 2000 * 1024 ** 3, freeBytes: 200 * 1024 ** 3 }])[0].verdict === "fine");
+  check("E12d system drive missing -> not_checked", summarizeDiskSpaceGroup([], { systemDrivePresent: false }).verdict === "not_checked");
+}
+
+// -- power.speedCap (engineChecks fixtures a-d) --
+{
+  check("E13a perf [0,34,33,35] util [0,85,90,88] -> capped", summarizeSpeedCap({ perf: [34, 33, 35], util: [85, 90, 88] }).verdict === "capped");
+  check("E13b perf [0,98,99,97] with high utility -> full-speed", summarizeSpeedCap({ perf: [98, 99, 97], util: [85, 90, 88] }).verdict === "full-speed");
+  check("E13c utility never reaches 60 -> unclear (an idle CPU is never judged)", summarizeSpeedCap({ perf: [95, 96, 94], util: [10, 15, 12] }).verdict === "unclear");
+  check("E13d Get-Counter error -> not_checked, never a fallback to clock speed", summarizeSpeedCap({ counterOk: false }).verdict === "not_checked");
+  check("E13e no implied clock-speed fallback anywhere in decode/summarize", !/CurrentClockSpeed/.test(fs.readFileSync(path.join(APP, "src/doors/summarize.mjs"), "utf8")) && !/CurrentClockSpeed/.test(fs.readFileSync(path.join(APP, "src/doors/decode.mjs"), "utf8")));
 }
 
 console.log(`\nhideout doors selftest: ${pass} passed, ${fail} failed`);
