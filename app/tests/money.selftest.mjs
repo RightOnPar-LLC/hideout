@@ -313,6 +313,28 @@ function request(port, { method = "GET", path: p = "/", headers = {}, body } = {
   // plants the home-folder name / an identifier makes the SAME check go red.
   check("F4b negative control: a fixture string carrying an identifier is caught", me.length > 0 && identityHits(`totally normal text ${me[0]} more text`, me).length === 1);
   check("F4c negative control: a fixture string carrying none of them stays clean", identityHits("totally normal text with no identifiers at all", me).length === 0);
+  // F4d, added (public-repo-hygiene follow-up review, 2026-09-26): F4 above only catches
+  // PERSONAL identity strings (a builder's own account/PC/profile name). It would NOT have
+  // caught the estate-root path literal ("<drive>:/projects/..." shaped) doors.selftest.mjs's
+  // own estatePatterns() briefly shipped and a prior fix removed - none of that machine's
+  // identity strings appear in a bare filesystem path. Widened here with a STRUCTURAL,
+  // no-proper-noun pattern (any drive letter, no hardcoded org/estate word - safe to ship)
+  // so a planted estate-root path literal in ANY tracked file goes red on `npm test`, not
+  // only when the estate's own private governance.config.json happens to be on the machine
+  // running the check. Mirrors doors.selftest.mjs's own "drive-root-projects-path" GENERIC_FORBID
+  // entry (duplicated rather than imported - doors.selftest.mjs's module body runs its own
+  // D1-D5 checks and calls process.exit() at import time, so importing it here would exit this
+  // suite early before F5/F6 ever ran).
+  const PROJECT_PATH_SHAPE = /\b[a-z]:[\\/](?:[\w.-]+[\\/])*projects\b/i;
+  check("F4d no absolute drive-letter '<drive>:/projects/...' path literal (the estate-root path SHAPE) ends up in any tracked file", !PROJECT_PATH_SHAPE.test(shippedText));
+  // Negative control, built so this file's OWN source never contains the shape it's testing
+  // for (a literal fixture here would trip the very check above, since F4 scans this file's
+  // own tracked text too) - the drive-path is assembled at RUNTIME from pieces that are never
+  // adjacent in the source.
+  const fixtureRootWord = ["proj", "ects"].join("");
+  const fixtureDrivePath = ["f", ":", "/", fixtureRootWord, "/fake/example.json"].join("");
+  check("F4e negative control: a runtime-assembled fixture carrying the path SHAPE is caught (proves F4d isn't vacuous)", PROJECT_PATH_SHAPE.test(fixtureDrivePath));
+  check("F4f negative control: ordinary prose with no such path stays clean", !PROJECT_PATH_SHAPE.test("totally normal text with no drive-letter path at all"));
   check("F5 the guide is told it never logs in, cancels or sends", /never logs into accounts, cancels anything, or sends email/.test(src("src/guide-spec.mjs")));
   check("F6 letters never state facts the person did not give: unconfirmed lines go in [Confirm: ...] brackets", /Never state a fact the person hasn't told you and Hideout doesn't show/.test(src("src/guide-spec.mjs")) && src("src/guide-spec.mjs").includes("[Confirm: "));
 }

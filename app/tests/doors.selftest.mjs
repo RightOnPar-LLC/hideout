@@ -50,6 +50,12 @@ export const GENERIC_FORBID = [
   { id: "private-door-marker", re: /Editor-agent door —/ },
   { id: "windows-home-path", re: /\b[A-Za-z]:\\+Users\\+[^\\\s`'"]+/ },
   { id: "unix-home-path", re: /(^|[\s`'"(])\/(home|Users)\/[A-Za-z0-9._-]+\//m },
+  // Structural, not a proper noun: an absolute drive-letter path rooted at (or passing
+  // through) a folder literally named "projects" - the exact SHAPE of the estate-private
+  // literal a prior fix removed from this file's own estatePatterns() (see that function's
+  // comment). Any drive letter, no hardcoded org/estate word, so it ships safely in public
+  // source while still catching a re-drifted estate-root path in a future edit.
+  { id: "drive-root-projects-path", re: /\b[A-Za-z]:[\\/](?:[\w.-]+[\\/])*projects\b/i },
 ];
 
 // ------------------------------------------------------------------ identity patterns (computed at runtime, never hardcoded - mirrors money.selftest.mjs F4)
@@ -113,6 +119,17 @@ console.log(estate ? `  (estate governance config found - checking its ${estate.
   check("D1 both door files are TRACKED (git ls-files), not merely present on disk", doorFiles.every((f) => tracked.includes(f)));
 }
 
+// ------------------------------------------------------------------ D1b: negative control - the SAME predicates D1 runs against the live door
+// files, exercised here against SYNTHETIC fixture text instead, so a future edit to either
+// predicate can't silently go dead with no red test to flag it (D1 previously rested entirely
+// on the live repo state already being clean, with no fixture of its own - unlike D2/D3).
+{
+  const isPublicHeading = (text) => /## Agent operating rules/.test(text) && !/# Editor-agent door/.test(text);
+  check("D1b negative control: a fixture carrying the PRIVATE door heading fails D1's public-heading predicate", !isPublicHeading("# Editor-agent door — control-repo\n\nsome private content"));
+  check("D1c negative control: a fixture carrying the real public heading passes D1's public-heading predicate", isPublicHeading("## Agent operating rules\n\nsome public content"));
+  check("D1d negative control: a fixture carrying the private-door marker is caught by the same scan D1 runs against door-file content", scanText("# Editor-agent door — control-repo", ALL_FORBID).some((h) => h.id === "private-door-marker"));
+}
+
 // ------------------------------------------------------------------ D2: negative control - the scanner actually fires (fabricated tokens only, never a real estate word)
 {
   const fixture = [{ id: "fixture-token", re: /faketown-9182/ }];
@@ -145,18 +162,46 @@ export function checkFabricatedNames(names) {
 // a rule that is itself invisible unless you go looking for it, and that a bare
 // `git status --porcelain` respects. `git ls-files --others` WITHOUT
 // --exclude-standard ignores every exclude rule (.gitignore AND
-// .git/info/exclude) and so still sees such a file; node_modules/dist/out/
-// .wrangler/build are the ordinary, expected reason a file is untracked and are
-// carved out, so this stays a signal, not noise on every `npm ci`.
+// .git/info/exclude) and so still sees such a file.
+//
+// FIXED 2026-09-26 (review finding): the previous version carved out
+// node_modules/dist/out/.wrangler/build by a hand-rolled DIRECTORY regex, which does
+// not match a bare FILENAME .gitignore entry (app/.gitignore lists sea-config.json and
+// gateway-url.txt with no slash) - one ordinary `build-exe.ps1` run left those two
+// build artifacts as untracked-but-gitignored, and the regex flagged them as a "hidden
+// private file" every time after, crying wolf on routine local-build leftovers. Fixed
+// by asking git itself which mechanism hides each file (`git check-ignore -v`) instead
+// of re-deriving .gitignore's own rules by hand: a file the repo's own TRACKED .gitignore
+// hides is expected and safe (any clone sees the same rule); a file hidden by anything
+// else - most dangerously a LOCAL, untracked .git/info/exclude entry - is the real hazard.
+export function isHiddenByTrackedGitignore(source) {
+  return /(^|[\\/])\.gitignore$/.test(String(source ?? ""));
+}
 {
-  const EXPECTED_IGNORED = /(^|\/)(node_modules|dist|out|\.wrangler|build)\//;
   const listOthers = (extra) => execFileSync("git", ["ls-files", "--others", ...extra], { cwd: ROOT, encoding: "utf8" }).split("\n").map((s) => s.trim()).filter(Boolean);
   const visible = listOthers(["--exclude-standard"]); // what a plain `git status` shows
   const raw = listOthers([]); // ignores every exclude rule, including a LOCAL .git/info/exclude
-  const hiddenOnly = raw.filter((f) => !visible.includes(f) && !EXPECTED_IGNORED.test(f));
-  check("D4 no source-tree file is hidden from `git status` by an exclude rule (.gitignore or a local .git/info/exclude) outside the expected dependency/build dirs", hiddenOnly.length === 0, hiddenOnly.join(", "));
+  const hidden = raw.filter((f) => !visible.includes(f));
 
-  const candidates = [...new Set([...visible, ...hiddenOnly])].filter((f) => !EXPECTED_IGNORED.test(f));
+  // Classify every hidden file in ONE `git check-ignore` call (there can be thousands of
+  // node_modules entries in `hidden`; a per-file spawn would be needlessly slow).
+  const sourceOf = new Map();
+  if (hidden.length) {
+    let out = "";
+    try {
+      out = execFileSync("git", ["check-ignore", "-v", "--stdin"], { cwd: ROOT, encoding: "utf8", input: hidden.join("\n") + "\n" });
+    } catch (e) { out = e.stdout || ""; } // exit 1 just means "not every path matched" - stdout still lists the ones that did
+    for (const line of out.split("\n")) {
+      if (!line) continue;
+      const tab = line.lastIndexOf("\t");
+      if (tab === -1) continue;
+      sourceOf.set(line.slice(tab + 1), line.slice(0, tab).split(":")[0]);
+    }
+  }
+  const hiddenByOther = hidden.filter((f) => !isHiddenByTrackedGitignore(sourceOf.get(f)));
+  check("D4 no untracked file is hidden from `git status` by anything other than a TRACKED .gitignore rule (a local-only exclude such as .git/info/exclude is the exact canonical-checkout hazard)", hiddenByOther.length === 0, hiddenByOther.join(", "));
+
+  const candidates = [...new Set([...visible, ...hiddenByOther])];
   const TEXTY = /\.(md|mjs|js|json|html|css|ps1|cmd|toml|txt|svg)$/i;
   const leaked = [];
   for (const rel of candidates) {
@@ -169,6 +214,15 @@ export function checkFabricatedNames(names) {
     } catch { /* unreadable/binary - not a text leak vector */ }
   }
   check("D4 no untracked file (visible or exclude-hidden) matches the estate-denylist / identity patterns by path or content", leaked.length === 0, leaked.join("; "));
+}
+
+// ------------------------------------------------------------------ D4b: negative control - the classify predicate D4 relies on, exercised
+// against synthetic `git check-ignore -v` output rather than real files (the GAP the
+// review named: D4, like D1, had no fixture-based negative control of its own).
+{
+  check("D4b negative control: a file hidden by a TRACKED .gitignore classifies as expected/safe", isHiddenByTrackedGitignore("app/.gitignore"));
+  check("D4c negative control: a file hidden by .git/info/exclude (the exact canonical-checkout hazard) classifies as NOT safe", !isHiddenByTrackedGitignore(".git/info/exclude"));
+  check("D4d negative control: an unmatched path (no exclude source at all) classifies as NOT safe, never silently passes", !isHiddenByTrackedGitignore(undefined));
 }
 
 // ------------------------------------------------------------------ D5: every shipped DOORS file and fixture, whole-file (mirrors the governance
