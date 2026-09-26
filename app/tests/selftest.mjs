@@ -325,4 +325,9 @@ check("G15 hand validation matches the spec for every tool", validateToolInput("
 }
 
 console.log(`\nhideout app selftest: ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+// Same fix, same measured cause, as money.selftest.mjs's identical line: the E-series
+// gateway tests use the global `fetch()`, whose process-wide undici dispatcher isn't
+// closeable from userland on this Node build and doesn't drain on its own before a forced
+// exit - occasionally tripping a native libuv assertion on this Node v26.1.0/Windows combo.
+// See money.selftest.mjs for the full measurement (16/16 clean runs at this delay).
+setTimeout(() => process.exit(fail ? 1 : 0), 1500);

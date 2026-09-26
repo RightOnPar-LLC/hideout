@@ -16,11 +16,13 @@ Set-Location $PSScriptRoot
 $dist = Join-Path $PSScriptRoot 'dist'
 New-Item -ItemType Directory -Force $dist | Out-Null
 
-Write-Host "running self-tests (app + money + engine + gateway)..."
+Write-Host "running self-tests (app + money + doors + engine + gateway)..."
 & node (Join-Path $PSScriptRoot 'tests\selftest.mjs')
 if ($LASTEXITCODE -ne 0) { throw "app selftest failed - build aborted" }
 & node (Join-Path $PSScriptRoot 'tests\money.selftest.mjs')
 if ($LASTEXITCODE -ne 0) { throw "money selftest failed - build aborted" }
+& node (Join-Path $PSScriptRoot 'tests\doors.selftest.mjs')
+if ($LASTEXITCODE -ne 0) { throw "doors selftest failed - build aborted" }
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '..\tests\selftest.ps1')
 if ($LASTEXITCODE -ne 0) { throw "engine selftest failed - build aborted" }
 & node (Join-Path $PSScriptRoot '..\gateway\tests\selftest.mjs')
