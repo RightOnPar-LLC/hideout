@@ -35,6 +35,7 @@ $assets = [ordered]@{
   'engine/hideout.ps1' = '../hideout.ps1'
   'engine/hunt.ps1' = '../hunt.ps1'
   'engine/report.html' = '../report.html'
+  'engine/doors.ps1' = '../doors.ps1'
 }
 
 # The guide talks to a cloud gateway (which holds the Claude key) - never a key in the exe.
