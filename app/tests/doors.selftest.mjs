@@ -74,7 +74,14 @@ export function identityPatterns() {
 // shipped in this repo. A stranger building this public repo simply does not have
 // this file, and the generic + identity checks above still run in full.
 export function estatePatterns() {
-  const candidates = [process.env.HIDEOUT_GOVERNANCE_CONFIG, "E:/projects/_hq/governance.config.json"].filter(Boolean);
+  // ONLY the env var — never a hardcoded estate path literal in committed source.
+  // (A previous version of this function fell back to a literal default candidate
+  // path when the env var was unset; that literal was itself an estate path shipped
+  // in this public repo's source, exactly the class of leak this file exists to
+  // catch. Fixed 2026-09-25: a stranger cloning this repo, or a builder who has not
+  // set the env var, gets `null` here and the generic + identity checks still run
+  // in full — see the file-header comment above for why that degrade is correct.)
+  const candidates = [process.env.HIDEOUT_GOVERNANCE_CONFIG].filter(Boolean);
   for (const p of candidates) {
     try {
       const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
