@@ -14,17 +14,21 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
-import { GUIDE_TOOLS, requestParams, MODEL } from "./spec.mjs";
+import { GUIDE_TOOLS, requestParams, MODEL, SPEC_VERSION } from "./spec.mjs";
 import { requestParams as requestParamsV1 } from "./spec-v1.mjs";
 
 // Which spec a turn gets, by the app's own x-hideout-spec header (guide.mjs's
-// gatewayTransport sends guide-spec.mjs's SPEC_VERSION). "2" is today's spec.mjs; anything
-// else - no header at all, or "1" - is the frozen spec-v1.mjs, so an app that hasn't updated
-// yet keeps hearing about exactly the tools and the tab its own window actually has. GUIDE_TOOLS
-// (below, from spec.mjs) validates tool_use names in history for BOTH: v1's eleven names are a
-// subset of v2's thirteen, so a v1 client's own history still validates against the current list.
+// gatewayTransport sends guide-spec.mjs's SPEC_VERSION). Today's SPEC_VERSION (from
+// spec.mjs, which re-exports app/src/guide-spec.mjs - or, in a packed deploy build, carries
+// the same value inlined) is today's spec.mjs; anything else - no header at all, or an older
+// version - is the frozen spec-v1.mjs, so an app that hasn't updated yet keeps hearing about
+// exactly the tools and the tab its own window actually has. Comparing against the imported
+// SPEC_VERSION (never a hardcoded literal) means the next version bump needs no matching edit
+// here - the whole point of this rollout mechanism. GUIDE_TOOLS (below, from spec.mjs)
+// validates tool_use names in history for BOTH: v1's eleven names are a subset of v2's
+// thirteen, so a v1 client's own history still validates against the current list.
 function requestParamsFor(req) {
-  return String(req.headers["x-hideout-spec"] || "") === "2" ? requestParams : requestParamsV1;
+  return String(req.headers["x-hideout-spec"] || "") === String(SPEC_VERSION) ? requestParams : requestParamsV1;
 }
 
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);

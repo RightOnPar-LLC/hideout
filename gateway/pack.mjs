@@ -33,9 +33,15 @@ export function pack() {
   return BANNER + src;
 }
 
-// CLI: node pack.mjs [outFile]  (default: gateway/spec.mjs - the deploy build step)
+// CLI: node pack.mjs [outFile]  (default: gateway/dist/spec.mjs - a gitignored build output,
+// never the tracked dev/spec.mjs one-line re-export). `npm run pack` runs this with no
+// argument, so the default MUST NOT be the checked-in spec.mjs: overwriting that file in
+// place would defeat dev's live-reload of guide-spec.mjs and risks a developer committing
+// the generated copy over the tracked re-export (caught by G16 in gateway/tests/selftest.mjs,
+// which runs this exact CLI path, not just the pack() function).
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {
-  const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join(HERE, "spec.mjs");
+  const out = process.argv[2] ? path.resolve(process.argv[2]) : path.join(HERE, "dist", "spec.mjs");
+  fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, pack());
   console.log(`packed ${path.relative(process.cwd(), SOURCE)} -> ${path.relative(process.cwd(), out)}`);
 }

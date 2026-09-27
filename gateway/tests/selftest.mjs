@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createGateway, validateMessages, costUsd } from "../server.mjs";
 import { MODEL, SYSTEM_PROMPT, GUIDE_TOOLS } from "../spec.mjs";
@@ -113,6 +114,33 @@ try {
     const devSpecPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "spec.mjs");
     check("G15 pack() never touches the checked-in spec.mjs (dev's one-line re-export stays put)", fs.readFileSync(devSpecPath, "utf8").startsWith("// Dev indirection"));
   } finally { fs.rmSync(packDir, { recursive: true, force: true }); }
+}
+
+// ---- pack.mjs's own CLI default path - the thing `npm run pack` (gateway/package.json)
+// actually runs with NO argument. G13-G15 above only ever call the pack() function against
+// a temp file; they never prove what happens when a developer runs the script itself. This
+// spawns the real CLI, with no outFile, exactly like `npm run pack` does, and proves the
+// tracked dev/spec.mjs one-line re-export survives it untouched while a gitignored build
+// copy lands in gateway/dist/. A prior local dist/spec.mjs (if a developer already has one)
+// is snapshotted and restored, so this test never destroys someone's existing build output.
+{
+  const gatewayDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const devSpecPath = path.join(gatewayDir, "spec.mjs");
+  const distSpecPath = path.join(gatewayDir, "dist", "spec.mjs");
+  const devBefore = fs.readFileSync(devSpecPath, "utf8");
+  const distExistedBefore = fs.existsSync(distSpecPath);
+  const distBefore = distExistedBefore ? fs.readFileSync(distSpecPath, "utf8") : null;
+  try {
+    execFileSync(process.execPath, ["pack.mjs"], { cwd: gatewayDir });
+    check("G16 `npm run pack` (the CLI's default outFile) never overwrites the tracked spec.mjs",
+      fs.readFileSync(devSpecPath, "utf8") === devBefore);
+    check("G16b the CLI's default outFile lands in gateway/dist/ instead (gitignored - gateway/.gitignore:2)",
+      fs.existsSync(distSpecPath) && fs.readFileSync(distSpecPath, "utf8") === pack());
+  } finally {
+    fs.writeFileSync(devSpecPath, devBefore);
+    if (distExistedBefore) fs.writeFileSync(distSpecPath, distBefore);
+    else fs.rmSync(path.join(gatewayDir, "dist"), { recursive: true, force: true });
+  }
 }
 
 console.log(`\ngateway selftest: ${pass} passed, ${fail} failed`);

@@ -116,7 +116,7 @@ scam scare in plain words, one step at a time.
 
 Run: `node app/src/main.mjs` (dev) or build one file with
 `powershell -File app/build-exe.ps1` -> `app/dist/Hideout.exe` (unsigned: sign it before
-giving it to anyone). Tests: app 82, money 74, doors 136, engine 40, gateway 26 - all five
+giving it to anyone). Tests: app 91, money 74, doors 136, engine 40, gateway 26 - all five
 gate the build (`app/build-exe.ps1`).
 
 ## Tests
