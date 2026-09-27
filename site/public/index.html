@@ -18,7 +18,7 @@
 <header class="top">
   <a class="mark" href="/" aria-label="Hideout home">HIDEOUT<span class="cur" aria-hidden="true">_</span></a>
   <nav aria-label="Sections">
-    <a href="#pc">Your PC</a><a href="#money">Money</a><a href="#guide">The guide</a><a href="#promises">Promises</a>
+    <a href="#pc">Your PC</a><a href="#money">Money</a><a href="#doors">Doors &amp; power</a><a href="#guide">The guide</a><a href="#promises">Promises</a>
     <a class="gh" href="https://github.com/RightOnPar-LLC/hideout">GitHub</a>
   </nav>
 </header>
@@ -47,6 +47,7 @@
     <div class="tabs" role="tablist">
       <button role="tab" id="t-pc" aria-controls="p-pc" aria-selected="true">Your PC</button>
       <button role="tab" id="t-money" aria-controls="p-money" aria-selected="false">Money</button>
+      <button role="tab" id="t-doors" aria-controls="p-doors" aria-selected="false">Doors &amp; power</button>
       <button role="tab" id="t-guide" aria-controls="p-guide" aria-selected="false">The guide</button>
     </div>
 
@@ -95,6 +96,25 @@
       </div>
     </div>
 
+    <div class="panel" id="p-doors" role="tabpanel" aria-labelledby="t-doors" hidden>
+      <div class="shot">
+        <div class="verdict"><div class="mini-radar high"><span>2</span></div><div><h3>2 doors open</h3><p>Remote Desktop is on, and an admin account may have no password.</p></div></div>
+        <div class="money-row bad"><div><b>Remote Desktop</b><span>On</span></div><em class="bad">open</em><small>Settings &gt; System &gt; Remote Desktop &gt; Off.</small></div>
+        <div class="money-row bad"><div><b>Other accounts</b><span>May have no password</span></div><em class="bad">worth a look</em><small>Settings &gt; Accounts &gt; Other users &mdash; take away its admin rights or give it a password.</small></div>
+        <div class="money-row"><div><b>Disk encryption</b><span>On</span></div><em>shut</em><small>Confirmed without admin, and again by the deep check.</small></div>
+        <div class="money-row"><div><b>Sudden shutdowns (30 days)</b><span>0 &mdash; crash records are on</span></div><em>quiet</em><small>If it starts happening, Hideout can tell power loss from a crash.</small></div>
+      </div>
+      <div class="explain" id="doors">
+        <h2>Doors &amp; power</h2>
+        <ul>
+          <li><strong>Doors</strong> &mdash; every way in that's standing open: Remote Desktop, an admin account that may have no password, disk encryption, a remote-support program installed or running right now, antivirus, leftovers not yet scanned.</li>
+          <li><strong>Power</strong> &mdash; why it keeps dying: sudden shutdowns (power loss, a crash, or can't-tell), battery health and charger episodes, sleep timers, a restart waiting, disk space, an opt-in speed check.</li>
+          <li><strong>Couldn't check is never shown as clean.</strong> Every reading is open, shut, or couldn't check &mdash; with the reason and how long ago Hideout looked.</li>
+          <li><strong>It only looks.</strong> The exact Settings click path and the undo, for your edition of Windows. You do the clicking.</li>
+        </ul>
+      </div>
+    </div>
+
     <div class="panel" id="p-guide" role="tabpanel" aria-labelledby="t-guide" hidden>
       <div class="shot chat">
         <div class="msg you">A man called me about a virus and I let him on my computer. I sent him money with Zelle. Can you check my bank charges?</div>
@@ -124,6 +144,7 @@
     <h2 id="prom-h">What Hideout promises</h2>
     <div class="grid">
       <div class="p"><h3>It only looks</h3><p>No deleting, moving, disabling or uploading. It can't change your PC, and neither can the guide.</p></div>
+      <div class="p"><h3>It checks the doors</h3><p>Remote Desktop, extra accounts, disk encryption, remote-support programs &mdash; and why your PC keeps dying. It tells you the exact step; you do the clicking.</p></div>
       <div class="p"><h3>Hands off your accounts</h3><p>It never asks for passwords, never logs in anywhere, never cancels or sends anything for you.</p></div>
       <div class="p"><h3>Memory locked to your PC</h3><p>Your case file and statements are stored encrypted, with a key sealed by your PC's security chip. Nothing is uploaded to be stored.</p></div>
       <div class="p"><h3>The guide sees less than you do</h3><p>When you ask the guide, it gets a summary with your name, account numbers and PC name removed — and nothing else from your PC.</p></div>

@@ -54,18 +54,21 @@ scam scare in plain words, one step at a time.
 
 - **Worker** - runs the engine as background jobs (quick scan, deep check, deep check
   with admin via a Windows prompt), live progress, one at a time. Read-only.
-- **Guide** - eleven tools: six for the PC (read scan, run scan, start deep check, read
-  deep-check summary, read the case file, tick a recovery step) and five for Money (below);
-  no tool can change the PC. Sees only redacted data (no account, profile or PC name, no
-  token-shaped strings). Reaches Claude through a gateway (below), or directly with
-  `ANTHROPIC_API_KEY` on a developer's own machine. Without either, scans still work and
-  the guide says it isn't connected.
+- **Guide** - thirteen tools: six for the PC (read scan, run scan, start deep check, read
+  deep-check summary, read the case file, tick a recovery step), five for Money (below) and
+  two for Doors & power (below); no tool can change the PC. Sees only redacted data (no
+  account, profile or PC name, no token-shaped strings). Reaches Claude through a gateway
+  (below), or directly with `ANTHROPIC_API_KEY` on a developer's own machine. Without
+  either, scans still work and the guide says it isn't connected. A gateway redeploy rolls
+  out new tools without breaking an app that hasn't updated yet: every request carries the
+  app's own spec version (`x-hideout-spec`), and the gateway answers an old version with a
+  frozen copy of the old tool list and prompt for one release (`gateway/spec-v1.mjs`).
 - **Locked-down local server** - 127.0.0.1 on a random port, per-launch session key,
   Host + Origin checks, strict CSP; exits when the window closes.
 - **Private brain (case file)** - each PC gets its own encrypted memory: the
   cognitive-mcp engine, run as a child process, with its own file under
   `%LOCALAPPDATA%\Hideout\brain` and its key **sealed by that PC's TPM**. It remembers
-  scans, deep checks and 13 recovery steps; the guide reads it at the start of a chat and
+  scans, deep checks and 19 recovery steps; the guide reads it at the start of a chat and
   ticks steps off as the person reports them. Nothing leaves the PC. (Not the default
   "keystore" key mode: that uses one fixed Credential Manager slot for every cognitive-mcp
   store on a PC, so a second store would share another app's master key.) The engine is
@@ -95,15 +98,33 @@ scam scare in plain words, one step at a time.
   Directory: `app/data/merchants.json` (46 consumer companies with the vendor pages each
   entry came from, plus 41 developer services). Provenance: `app/src/money/FOLDED-FROM.md`.
   Refund odds and "act by" dates are general information, not legal or financial advice.
+- **Doors & power** (third tab) - every way into this PC that's standing open: Remote
+  Desktop, an admin account that may have no password, disk encryption, a remote-support
+  program installed or running right now, antivirus, and leftovers not yet scanned. And why
+  it keeps dying: sudden shutdowns (power loss vs. crash vs. can't-tell, from the crash-record
+  setting itself), battery health and charger episodes, the sleep timers, a restart waiting,
+  disk space, and an opt-in speed check. Every reading is open / shut / **couldn't check** -
+  couldn't check is never shown as clean - with how long ago Hideout looked. Hideout shows the
+  exact Settings click path and the undo for each one; it never flips a switch, disables an
+  account, turns on encryption or starts a scan itself. A recovery ladder on the same tab
+  walks the person from "hang up" through lock-down, password changes (unconditional -
+  whoever let the attacker in, passwords set before the incident are burned), Windows
+  Security scans, and only then deleting the leftovers a scan (or the person's own word)
+  cleared. Engine: `doors.ps1` (raw facts only; a quick pass in seconds plus a slower
+  background pass); verdicts in `app/src/doors/summarize.mjs` and `decode.mjs`. Provenance
+  and what did **not** come across from the estate's own box-audit tool: `app/src/doors/FOLDED-FROM.md`.
 
 Run: `node app/src/main.mjs` (dev) or build one file with
 `powershell -File app/build-exe.ps1` -> `app/dist/Hideout.exe` (unsigned: sign it before
-giving it to anyone). Tests: app 66, money 69, engine 23, gateway 20 - all four gate the build.
+giving it to anyone). Tests: app 82, money 74, doors 136, engine 40, gateway 26 - all five
+gate the build (`app/build-exe.ps1`).
 
 ## Tests
 
-`pwsh -File tests\selftest.ps1`: 23 checks. They build a fake sideloading folder from
-real signed files (one with a single flipped byte, so its signature is a real
-`HashMismatch`), check the verdicts and the report's escaping, and prove the engine
-has no delete/move/run commands. Negative controls: removing tamper detection or
-HTML escaping turns the matching checks red.
+`pwsh -File tests\selftest.ps1` (also runs clean under Windows PowerShell 5.1): 40 checks.
+They build a fake sideloading folder from real signed files (one with a single flipped
+byte, so its signature is a real `HashMismatch`), check the verdicts and the report's
+escaping, and prove the engine (`hideout.ps1`, `hunt.ps1`, `doors.ps1`) has no delete/move/
+run/change commands. Negative controls: removing tamper detection, HTML escaping, or any of
+the doors-specific forbidden commands (`Disable-LocalUser`, `Start-MpScan`, `manage-bde`, ...)
+turns the matching checks red.

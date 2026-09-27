@@ -1,17 +1,30 @@
-// guide-spec.mjs — the ONE definition of the Hideout Guide: model, instructions, tools.
-// Shared by the desktop app and the cloud gateway, so the gateway can enforce exactly
-// this spec server-side (a client can't swap in its own prompt, model or tools and turn
-// the gateway's Claude key into a general-purpose one).
+// spec-v1.mjs — FROZEN. A byte-for-byte snapshot of app/src/guide-spec.mjs exactly as it
+// stood before the Doors & power fold (eleven tools, thirteen case steps, no Doors block).
+//
+// Why this file exists: gateway/server.mjs (this folder) supplies TOOLS and SYSTEM_PROMPT to
+// Claude on EVERY turn - the client only ever sends the conversation (guide-spec.mjs's own
+// header comment explains why: it's what stops a stolen install token becoming a general-
+// purpose Claude key). That means a gateway redeploy changes what EVERY already-installed
+// app is told about, including ones that haven't updated their own copy of the app yet. An
+// un-updated app's guide.mjs would then hear about get_doors_summary / run_doors_check and a
+// "Doors & power" tab that its own window doesn't have - guide.mjs:200's validateToolInput
+// would refuse the very tool the model just tried to call, and the SYSTEM_PROMPT would send
+// the person looking for a tab that isn't there.
+//
+// Fix: the app sends "x-hideout-spec: <N>" on every /v1/guide/turn (guide.mjs's
+// gatewayTransport, N = guide-spec.mjs's own SPEC_VERSION). server.mjs answers header "2"
+// with the live spec.mjs (today's guide-spec.mjs) and anything else - no header, or "1" -
+// with THIS frozen file, for one release. Never hand-edit this file: it is a snapshot, not a
+// second copy of the current spec, and it stops being read the moment old installs have all
+// updated. Removal date: an OPEN-LOOPS entry (creator-os), tracked in the PR that added this
+// file - see gateway/tests/selftest.mjs's own header-dispatch tests for the contract this
+// file has to keep in the meantime.
+export const SPEC_VERSION = 1;
+
 export const MODEL = "claude-opus-5";
 export const EFFORT = "medium";
 export const MAX_TOKENS = 16000;
 export const FALLBACK_BETA = "server-side-fallback-2026-07-01";
-// The gateway supplies TOOLS and SYSTEM_PROMPT on every turn (gateway/server.mjs), so an
-// un-updated app talking to a redeployed gateway must not be told about tools or a tab it
-// doesn't have. The app sends this as the x-hideout-spec header (guide.mjs); the gateway
-// answers with this spec for "2" and with the frozen gateway/spec-v1.mjs for anything else
-// (missing, or "1"), for one release (see gateway/spec-v1.mjs's own header comment).
-export const SPEC_VERSION = 2;
 
 export const CASE_STEPS = {
   disconnected_internet: "Disconnected the PC from the internet",
@@ -27,13 +40,6 @@ export const CASE_STEPS = {
   defender_offline_scan: "Microsoft Defender Offline scan",
   contacted_professional: "Got help from a trusted IT professional",
   reported_fraud: "Reported it to the fraud-reporting service",
-  // Doors & power (six, additive - see guide-spec.mjs's own SYSTEM_PROMPT block below).
-  disabled_extra_account: "Took admin rights off the extra account (or turned it off)",
-  turned_off_remote_desktop: "Turned Remote Desktop off",
-  turned_on_device_encryption: "Turned on disk encryption (recovery key saved off this PC)",
-  deleted_leftovers_after_scan: "Deleted the leftovers Hideout flagged - after the scan",
-  checked_battery_and_charger: "Had the battery and charger checked",
-  pc_must_stay_on: "Told Hideout this PC is supposed to keep running when nobody is at it",
 };
 export const STEP_STATUS = ["done", "not_yet", "not_applicable"];
 export const LETTER_KINDS = ["refund_request", "cancel_by_email", "bank_dispute"];
@@ -77,23 +83,9 @@ Money (the Money tab)
 - Recovery scams: after a scam, callers and companies offer to get the money back for a fee, a gift card or remote access. That is a second scam. Only the bank, the card company, or the official fraud-reporting service.
 - If remoteAccessToolsInstalled lists a program, ask whether they installed it themselves or someone on the phone told them to. If someone else did, that is likely how they got in: uninstall it from Windows Settings > Apps after the scans.
 
-Doors & power (the third tab)
-- Read it with get_doors_summary when the person asks whether their PC is safe, whether someone can still get in, or why it keeps turning off. If there's no check yet, run one with run_doors_check - a few seconds, nothing changes.
-- Say open doors in plain words with the exact Settings click path for their edition of Windows, and the undo. On a work PC managed by an organisation, say "ask IT" instead of sending them to a switch they can't change.
-- An extra account that may have no password means anyone at the keyboard may walk past the lock screen - say "may", never state it as fact, and point to Settings > Accounts > Other users. Remote Desktop on means a way in from the network, unless the row says the organisation set it.
-- Whether a remote-support program was installed by the person or by a caller only decides how it likely got in - the password-change rule above (line 45) stays unconditional either way; never make it conditional on this answer.
-- Sleeping while plugged in is normal, unless the person tells you this PC is supposed to keep running when nobody is at it - then ask, and record pc_must_stay_on.
-- Sudden shutdowns with no crash record, while crash records are switched ON, are a power problem (battery, charger, cable) - not a virus. If crash records are OFF, say Hideout can't tell, and give the Settings path to turn them on. Never guess that a new battery or charger is needed - that's their money and their choice.
-- Not checked is not the same as off - say plainly what Hideout couldn't check and why, never as clean.
-- Never suggest deleting the leftovers before the card says it's unlocked, and say which of the two things unlocked it: a finished Windows Security scan, or the person's own word.
-- Disk encryption: give the click path for their edition of Windows, and never ask for, and never store the recovery key. Auto sign-in is a tradeoff to explain, never to recommend before the lock-down steps (removed the remote tool, the extra account, Remote Desktop) are all done.
-- The speed check is a button in the window (opt-in, about 10 seconds) - never something you start.
-
 Hard rules
 - Never ask for, or accept, passwords, one-time codes, card numbers, or recovery phrases. If someone pastes one, tell them to change it.
 - Never tell anyone to install remote-access software, disable their antivirus, pay a ransom, or run commands they don't understand. If a step needs a command, explain exactly what it does first, and prefer the Windows Settings route.
-- Never tell anyone to run a command that changes a setting, disables an account, turns off Remote Desktop, or turns on encryption - give the Settings route and the undo, and never run one yourself.
-- Never ask for, accept, or repeat back a disk-encryption recovery key - Hideout never stores one, and neither should you.
 - Don't guess who the attacker is or promise the PC is safe. Say what the evidence shows and what it doesn't.
 
 Using your tools
@@ -174,16 +166,6 @@ export const TOOLS = [
       required: ["kind", "subject", "body"],
       additionalProperties: false,
     },
-  },
-  {
-    name: "get_doors_summary",
-    description: "Read Hideout's doors & power check of this PC: ways in that are open (Remote Desktop, an account that may have no password, disk encryption, remote-support programs installed or running, antivirus, leftovers not yet scanned) and why it might keep dying (sudden shutdowns and whether they were power loss or crashes, battery health and charger episodes, sleep timers, a restart waiting, disk space). Every item is open / shut / not_checked with how many minutes ago it was checked - not_checked is never clean. Returns {doors: null, note} if no check has run yet. Read-only; never starts anything.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
-    name: "run_doors_check",
-    description: "Run the quick doors & power pass now (a few seconds, no prompt, nothing changes) and return the summary. The slower readings (event logs, tasks, firewall, antivirus) come from a separate pass that runs in the background once per launch and are returned with their own age when they're ready; this never waits for or launches that slower pass.",
-    input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
 ].map((t) => ({ ...t, eager_input_streaming: true }));
 

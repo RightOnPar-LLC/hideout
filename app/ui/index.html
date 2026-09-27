@@ -274,7 +274,8 @@
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = String(text); return n; }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  var state = { worker: null, ai: false, chatting: false };
+  var state = { worker: null, ai: false, chatting: false, caseSteps: [] };
+  function stepDone(id) { return (state.caseSteps || []).some(function (s) { return s.id === id && (s.status === "done" || s.status === "not_applicable"); }); }
 
   // ---------------- your PC ----------------
   function renderScan(scan) {
@@ -362,8 +363,9 @@
     var box = $("case"); clear(box);
     if (!m) return;
     box.appendChild(el("h2", null, "Case file"));
-    if (!m.available || !m.caseFile) { box.appendChild(el("div", "mem off", "Memory unavailable on this PC" + (m.why ? " - " + m.why : "") + ". Scans still work.")); return; }
+    if (!m.available || !m.caseFile) { state.caseSteps = []; box.appendChild(el("div", "mem off", "Memory unavailable on this PC" + (m.why ? " - " + m.why : "") + ". Scans still work.")); return; }
     var cf = m.caseFile;
+    state.caseSteps = cf.steps || [];
     box.appendChild(el("div", "mem", "Encrypted memory \u00b7 locked to this PC's security chip \u00b7 never leaves it"));
     box.appendChild(el("div", "note", cf.opened ? "Case opened " + cf.opened.slice(0, 10) + " \u00b7 " + cf.scans.length + " scan(s) remembered" : "New case"));
     var ul = el("ul", "steps");
@@ -616,7 +618,12 @@
     var deleteLocked = !(v && v.doors && v.doors.leftovers && v.doors.leftovers.deleteAllowed);
     RECOVERY.forEach(function (step, i) {
       var locked = step.key === "leftovers" && deleteLocked;
-      var greyed = step.key === "harden"; // ungates once lock-down A-C are recorded (PR3/4's case steps)
+      // Ungates once lock-down A-C are on record in the case file (or don't apply): A - the
+      // remote-support tool removed, B - the extra account's admin rights taken off, C -
+      // Remote Desktop turned off. The guide records these three via update_case_step; this
+      // mirrors that gate on the window side so the card never invites "harden" before them.
+      var lockDownDone = stepDone("removed_remote_access_tool") && stepDone("disabled_extra_account") && stepDone("turned_off_remote_desktop");
+      var greyed = step.key === "harden" && !lockDownDone;
       var c = el("div", "xcard" + (locked ? " locked" : "") + (greyed ? " greyed" : ""));
       c.appendChild(el("div", "rung", "Step " + (i + 1)));
       c.appendChild(el("h3", null, step.title));
