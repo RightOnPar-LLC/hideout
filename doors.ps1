@@ -109,7 +109,7 @@ if ($Pass -eq 'quick') {
     }
   }
 
-  Section 'extraAccount' {
+  Section 'extraAccount' { throw 'INJECTED-TEST-FAILURE';
     $usersOk = $true
     $users = @()
     try {
