@@ -16,6 +16,7 @@ import { Guide, lockedFetch, gatewayTransport } from "../src/guide.mjs";
 import { MODEL, SYSTEM_PROMPT, TOOLS, GUIDE_TOOLS, CASE_STEPS, validateToolInput, requestParams } from "../src/guide-spec.mjs";
 import { Brain, parseList, buildCaseFile } from "../src/brain.mjs";
 import { Worker, summarizeHunt } from "../src/worker.mjs";
+import { runProcess, POWERSHELL } from "../src/engine.mjs";
 import { createGateway } from "../../gateway/server.mjs";
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -325,7 +326,13 @@ check("G15 hand validation matches the spec for every tool", validateToolInput("
       if (args.includes(engine.doors)) {
         const pass = args[args.indexOf("-Pass") + 1];
         if (pass === "slow") doorsSlowStarted = true;
-        return { code: 0, stdout: JSON.stringify({ app: "Hideout doors", pass, sections: { remoteDesktopRegistry: { ok: true, items: [{ checked: true, control: {}, facts: { fDenyTSConnections: 1 } }] } } }) };
+        // Real doors.ps1 always gets a plain "-Out <path>" argument (never embedded in an
+        // encoded elevation script the way hunt-admin's is) - the fake mirrors that shape so
+        // this test still exercises #doors() writing to, then reading back from, a file.
+        const outPath = args[args.indexOf("-Out") + 1];
+        const data = JSON.stringify({ app: "Hideout doors", pass, sections: { remoteDesktopRegistry: { ok: true, items: [{ checked: true, control: {}, facts: { fDenyTSConnections: 1 } }] } } });
+        fs.writeFileSync(outPath, data);
+        return { code: 0, stdout: "  remoteDesktopRegistry     1 item(s)  0.0s" };
       }
       if (args[0] === "-NoProfile" && args[1] === "-EncodedCommand") {
         // hunt-admin's real shape: the out path is embedded inside the encoded elevation
@@ -355,6 +362,35 @@ check("G15 hand validation matches the spec for every tool", validateToolInput("
     const bad = await w2.enqueue("doors-quick").done;
     check("W11 a failed doors job is reported as failed, never as clean", bad.state === "failed");
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+// ------------------------------------------------------------------ worker: doors-quick against the REAL doors.ps1, unmocked
+// Closes the exact gap a review found: every doors test above mocks run() with canned JSON,
+// and the only test that spawns the real binary (tests/selftest.ps1 D1-D7) passes its own
+// -Out and reads the file directly, never going through Worker.#doors() - so neither test
+// could catch #doors() parsing raw stdout instead of the -Out file (a guaranteed JSON.parse
+// failure on a real machine, since doors.ps1's Section() Write-Hosts a progress line per
+// section, always, and that lands on stdout right next to the JSON unless -Out redirects it).
+// This spawns the real doors.ps1 through the real runProcess(), through the real Worker,
+// exactly as main.mjs does at runtime, with Windows PowerShell 5.1 (POWERSHELL) - the exact
+// host worker.mjs uses in production.
+{
+  const repoRoot = path.resolve(APP, "..");
+  const realDoors = path.join(repoRoot, "doors.ps1");
+  if (!fs.existsSync(POWERSHELL) || !fs.existsSync(realDoors)) {
+    console.log("  skip  W12-W13 (Windows PowerShell 5.1 or doors.ps1 not present on this machine)");
+  } else {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hideout-app-test-doors-real-"));
+    try {
+      const engine = { hideout: path.join(repoRoot, "hideout.ps1"), hunt: path.join(repoRoot, "hunt.ps1"), doors: realDoors, verify: () => true };
+      const w = new Worker({ engine, dir, run: runProcess, powershell: POWERSHELL });
+      const job = await w.enqueue("doors-quick").done;
+      const sections = w.latestDoors.quick?.sections || {};
+      check("W12 doors-quick against the REAL doors.ps1 (no mocked run) finishes done, not failed, and its sections parse - the exact production code path (-Out file, never raw stdout)", job.state === "done" && Object.keys(sections).length > 0 && sections.remoteDesktopRegistry?.items?.length > 0, job.message);
+      const leftoverDoorsFiles = fs.readdirSync(path.join(dir, "doors"));
+      check("W13 the transient doors output file is cleaned up after a successful read", leftoverDoorsFiles.length === 0, leftoverDoorsFiles.join(", "));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
 }
 
 // ------------------------------------------------------------------ real snapshot (a PC that has run a deep check)

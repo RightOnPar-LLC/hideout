@@ -39,6 +39,7 @@ export class Worker extends EventEmitter {
     this.latestScan = null; this.latestHunt = null;
     this.latestDoors = { quick: null, slow: null, speed: null };
     fs.mkdirSync(path.join(dir, "hunts"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "doors"), { recursive: true });
   }
 
   state() {
@@ -105,10 +106,19 @@ export class Worker extends EventEmitter {
     const pass = DOORS_PASS[job.kind];
     job.progress.push(pass === "quick" ? "Checking doors & power..." : pass === "slow" ? "Checking event logs, tasks, firewall, antivirus..." : "Running a short speed check...");
     this.emit("job", this.#public(job));
-    const r = await this.run(this.ps, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", this.engine.doors, "-Pass", pass], { timeoutMs: DOORS_TIMEOUT_MS[job.kind] });
+    // Like #hunt(): doors.ps1's Section() helper Write-Hosts a progress line per section on
+    // EVERY pass, unconditionally - that text lands on stdout right alongside the final JSON
+    // when nothing tells the script otherwise, so parsing r.stdout is a guaranteed JSON.parse
+    // failure on a real machine (reproduced 2026-09-26 with this exact run()+args shape).
+    // -Out makes doors.ps1 write clean JSON to a file instead and keeps stdout as progress-only.
+    const out = path.join(this.dir, "doors", `doors-${pass}-${now().replace(/[:.]/g, "-")}-${job.id}.json`);
+    const onLine = (l) => { job.progress.push(l.trim().replace(/\s+/g, " ").slice(0, 120)); this.emit("job", this.#public(job)); };
+    const r = await this.run(this.ps, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", this.engine.doors, "-Pass", pass, "-Out", out], { timeoutMs: DOORS_TIMEOUT_MS[job.kind], onLine });
     if (r.code !== 0) throw new Error(`doors ${pass} pass did not finish (${r.why || "exit " + r.code})`);
+    if (!fs.existsSync(out)) throw new Error(`doors ${pass} pass did not finish (no output file)`);
     let data;
-    try { data = JSON.parse(r.stdout); } catch { throw new Error("doors output was not readable"); }
+    try { data = JSON.parse(fs.readFileSync(out, "utf8")); } catch { throw new Error("doors output was not readable"); }
+    finally { try { fs.unlinkSync(out); } catch {} } // transient - never a case file like hunt's, nothing else reads this path
     this.latestDoors[pass] = { at: now(), ...data };
     job.message = `doors ${pass} pass done`;
   }
