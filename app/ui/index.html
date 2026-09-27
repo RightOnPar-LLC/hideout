@@ -187,6 +187,24 @@
   .xcard .row { margin: 10px 0 0; }
   .trap { color: var(--amber); font-size: 13px; margin: 4px 0; } .trap::before { content: "! "; font-family: var(--mono); }
 
+  /* doors & power - every row picks an EXPLICIT class (never the bare, unmodified .bar) so a
+     verdict this file forgets to map never silently reads as the default open/severe red. */
+  .card.doors .bar { background: var(--dim); box-shadow: none; }
+  .card.doors .bar.high { background: var(--red); box-shadow: 0 0 12px var(--red); }
+  .card.doors .bar.shut { background: var(--phos); box-shadow: 0 0 10px var(--phos); }
+  .card.doors .bar.unsure { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+  .verdict-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .verdict-row .v { font: 700 13px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+  .verdict-row .v.open { color: var(--red); } .verdict-row .v.shut { color: var(--phos); } .verdict-row .v.unsure { color: var(--amber); }
+  .stale { color: var(--dim); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
+  .xcard.locked { border-color: var(--line); box-shadow: none; opacity: .62; }
+  .xcard.locked h3::after { content: " — locked"; color: var(--dim); text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .xcard.greyed { border-color: var(--line); box-shadow: none; opacity: .5; filter: grayscale(.4); }
+  .xcard.greyed h3::after { content: " — do this after lock-down"; color: var(--dim); text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .rung { font: 11.5px var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+  .details summary { cursor: pointer; color: var(--cyan); font: 12px var(--mono); margin: 6px 0; }
+  .details[open] summary { color: var(--phos); }
+
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes blink { 50% { opacity: 0; } }
   @keyframes breathe { 50% { opacity: .55; filter: brightness(1.25); } }
@@ -199,7 +217,7 @@
 <header><span class="mark">HIDEOUT<span class="cur">_</span></span><span class="tag">// sees what hides</span><span class="grow"></span><span class="pill" id="pill">Starting</span><span class="note" id="ver"></span></header>
 <main>
   <section class="pc">
-    <div class="tabs" role="tablist"><button class="tab" id="tabBtnPc" type="button" role="tab" aria-selected="true" aria-controls="tabPc">Your PC</button><button class="tab" id="tabBtnMoney" type="button" role="tab" aria-selected="false" aria-controls="tabMoney">Money</button></div>
+    <div class="tabs" role="tablist"><button class="tab" id="tabBtnPc" type="button" role="tab" aria-selected="true" aria-controls="tabPc">Your PC</button><button class="tab" id="tabBtnMoney" type="button" role="tab" aria-selected="false" aria-controls="tabMoney">Money</button><button class="tab" id="tabBtnDoors" type="button" role="tab" aria-selected="false" aria-controls="tabDoors">Doors &amp; power</button></div>
     <div id="tabPc" role="tabpanel">
     <div class="verdict"><div class="radar"><div class="sweep"></div><div class="dot" id="dot">&#8230;</div></div><div><h1 id="headline">Looking at your PC...</h1><p id="sub">The first check runs on its own and takes under a minute.</p></div></div>
     <div class="actions">
@@ -225,6 +243,19 @@
       <div class="tiles" id="mTiles"></div>
       <div id="mBody"></div>
       <div class="row" style="margin-top:18px"><button class="mini" id="btnForget" type="button">Forget my statements</button></div>
+    </div>
+    <div id="tabDoors" role="tabpanel" hidden>
+      <div class="verdict"><div class="radar"><div class="sweep"></div><div class="dot" id="drDot">&#8230;</div></div><div><h1 id="drHead">Checking doors &amp; power...</h1><p id="drSub">The quick check runs in seconds; the slower checks fill in over the next minute.</p></div></div>
+      <div class="actions">
+        <button class="primary" id="btnDoorsCheck" type="button">Check again</button>
+        <button id="btnDoorsAdmin" type="button" title="Windows will ask you to click Yes">Deep check (admin)</button>
+        <button id="btnDoorsSpeed" type="button">Check speed</button>
+      </div>
+      <div class="job" id="drJob"></div>
+      <div class="note" id="drSafety">Hideout never changes a setting, never removes an account, never deletes a file and never runs a scan for you. Every step here is your click, at your keyboard.</div>
+      <div id="drDoors"></div>
+      <div id="drPower"></div>
+      <div id="drRecovery"></div>
     </div>
   </section>
   <section class="chat">
@@ -295,19 +326,29 @@
     box.appendChild(ul);
     box.appendChild(el("div", "note", "Ask the guide to walk you through it."));
   }
+  var MAIN_KINDS = ["scan", "hunt", "hunt-admin"];
+  var DOORS_KINDS = ["doors-quick", "doors-slow", "doors-speed"];
   function renderWorker(w) {
     if (!w) return; state.worker = w;
-    $("pill").textContent = w.busy ? "Scanning" : "Watching"; $("pill").className = "pill" + (w.busy ? " busy" : "");
-    var running = (w.jobs || []).filter(function (j) { return j.state === "running" || j.state === "queued"; });
-    ["btnScan", "btnHunt", "btnHuntAdmin"].forEach(function (id) { $(id).disabled = !!running.length; });
-    var last = (w.jobs || []).slice(-1)[0];
-    if (running.length) { var j = running[0]; $("job").textContent = label(j.kind) + ": " + ((j.progress && j.progress.slice(-1)[0]) || "working..."); }
-    else if (last && last.state === "failed") $("job").textContent = label(last.kind) + " didn't finish: " + last.message;
+    $("pill").textContent = w.busy || w.busyDoors ? "Scanning" : "Watching"; $("pill").className = "pill" + (w.busy || w.busyDoors ? " busy" : "");
+    var jobs = w.jobs || [];
+    var mainRunning = jobs.filter(function (j) { return MAIN_KINDS.indexOf(j.kind) >= 0 && (j.state === "running" || j.state === "queued"); });
+    var doorsRunning = jobs.filter(function (j) { return DOORS_KINDS.indexOf(j.kind) >= 0 && (j.state === "running" || j.state === "queued"); });
+    ["btnScan", "btnHunt", "btnHuntAdmin"].forEach(function (id) { $(id).disabled = !!mainRunning.length; });
+    // btnDoorsAdmin runs the SAME job as btnHuntAdmin (the main lane), so it disables with it too.
+    ["btnDoorsCheck", "btnDoorsAdmin", "btnDoorsSpeed"].forEach(function (id) { $(id).disabled = !!doorsRunning.length || (id === "btnDoorsAdmin" && !!mainRunning.length); });
+    var lastMain = mainRunning.length ? mainRunning[0] : jobs.filter(function (j) { return MAIN_KINDS.indexOf(j.kind) >= 0; }).slice(-1)[0];
+    if (mainRunning.length) { var j = mainRunning[0]; $("job").textContent = label(j.kind) + ": " + ((j.progress && j.progress.slice(-1)[0]) || "working..."); }
+    else if (lastMain && lastMain.state === "failed") $("job").textContent = label(lastMain.kind) + " didn't finish: " + lastMain.message;
     else $("job").textContent = "";
+    var lastDoors = doorsRunning.length ? doorsRunning[0] : jobs.filter(function (j) { return DOORS_KINDS.indexOf(j.kind) >= 0; }).slice(-1)[0];
+    if (doorsRunning.length) { var dj = doorsRunning[0]; $("drJob").textContent = label(dj.kind) + ": " + ((dj.progress && dj.progress.slice(-1)[0]) || "working..."); }
+    else if (lastDoors && lastDoors.state === "failed") $("drJob").textContent = label(lastDoors.kind) + " didn't finish: " + lastDoors.message;
+    else $("drJob").textContent = "";
     if (w.latestScan) renderScan(w.latestScan);
     renderDeep(w.latestHunt);
   }
-  function label(k) { return k === "scan" ? "Quick scan" : k === "hunt" ? "Deep check" : "Deep check (admin)"; }
+  function label(k) { return k === "scan" ? "Quick scan" : k === "hunt" ? "Deep check" : k === "hunt-admin" ? "Deep check (admin)" : k === "doors-quick" ? "Doors check" : k === "doors-slow" ? "Doors check (deeper)" : "Speed check"; }
   function post(url, body) { return fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) }); }
   $("btnScan").addEventListener("click", function () { post("/api/scan", { kind: "scan" }); });
   $("btnHunt").addEventListener("click", function () { post("/api/scan", { kind: "hunt" }); });
@@ -332,13 +373,16 @@
   }
 
   // ---------------- tabs ----------------
+  var TABS = { pc: { panel: "tabPc", btn: "tabBtnPc" }, money: { panel: "tabMoney", btn: "tabBtnMoney" }, doors: { panel: "tabDoors", btn: "tabBtnDoors" } };
   function showTab(which) {
-    var money = which === "money";
-    $("tabPc").hidden = money; $("tabMoney").hidden = !money;
-    $("tabBtnPc").setAttribute("aria-selected", String(!money)); $("tabBtnMoney").setAttribute("aria-selected", String(money));
+    Object.keys(TABS).forEach(function (k) {
+      var t = TABS[k], on = k === which;
+      $(t.panel).hidden = !on; $(t.btn).setAttribute("aria-selected", String(on));
+    });
   }
   $("tabBtnPc").addEventListener("click", function () { showTab("pc"); });
   $("tabBtnMoney").addEventListener("click", function () { showTab("money"); });
+  $("tabBtnDoors").addEventListener("click", function () { showTab("doors"); });
 
   // ---------------- money ----------------
   function usd(n) { return n == null ? "-" : "$" + Number(n).toFixed(2); }
@@ -475,6 +519,133 @@
     return c;
   }
 
+  // ---------------- doors & power ----------------
+  var DOOR_OPEN_CLASS = { open: "open", "open-but-blocked": "open", "open-and-connected": "open", off: "open", paused: "open", "running-now": "open", "flagged": "open", "stale-signatures": "open", "full-scan-never": "open" };
+  function rowClass(verdict) { if (verdict === "not_checked" || verdict === "not-available") return "unsure"; return DOOR_OPEN_CLASS[verdict] === "open" ? "open" : "shut"; }
+  var DOOR_LABEL = {
+    remoteDesktop: { open: "On", "open-but-blocked": "On, but blocked by the firewall", "open-and-connected": "On - someone is connected right now", shut: "Off", "set-by-your-organisation": "Set by your organisation - ask IT", "not-available": "Not available on this edition", not_checked: "Couldn't check" },
+    extraAccount: { open: "An admin account may have no password", "worth-a-look": "Worth a look", shut: "None found", "set-by-your-organisation": "Set by your organisation", not_checked: "Couldn't check" },
+    diskEncryption: { on: "On", off: "Off", "turning-on": "Turning on", "turning-off": "Turning off", paused: "Paused - usually after an update; turn it back on", locked: "Locked", not_checked: "Couldn't check" },
+    remoteSupport: { "running-now": "Running right now", installed: "Installed - did you put this here?", none: "None found", not_checked: "Couldn't check" },
+    antivirus: { open: "Real-time protection is off", "stale-signatures": "Signatures are out of date", "other-antivirus": "Another antivirus is in charge", "full-scan-never": "A full scan has never run - worth doing once", fine: "Fine", not_checked: "Couldn't check" },
+    leftovers: { flagged: "Flagged - scan before deleting", "clear-to-delete-by-evidence": "Clear to delete (a scan cleared it)", "clear-to-delete-by-your-word": "Clear to delete (you said the scan is done)", none: "None", not_checked: "Couldn't check" },
+  };
+  var DOOR_TITLE = { remoteDesktop: "Remote Desktop", extraAccount: "Other accounts", diskEncryption: "Disk encryption", remoteSupport: "Remote-support programs", antivirus: "Antivirus", leftovers: "Leftovers" };
+  var DOOR_ORDER = ["remoteDesktop", "extraAccount", "diskEncryption", "remoteSupport", "antivirus", "leftovers"];
+  var POWER_TITLE = { suddenShutdowns: "Sudden shutdowns (30 days)", batteryAndCharger: "Battery", sleepTimers: "Sleep timers", restartWaiting: "Restart waiting", startupHealth: "Programs set to run", diskSpace: "Disk space", speedCap: "Speed" };
+  var POWER_ORDER = ["suddenShutdowns", "batteryAndCharger", "sleepTimers", "restartWaiting", "startupHealth", "diskSpace", "speedCap"];
+  var SHUTDOWN_CLASS = { "power-loss": "Power loss", crash: "Crash", "held-power-button": "Held the power button", "cant-tell": "Can't tell - crash records are off" };
+
+  function ago(mins) { if (mins == null) return ""; if (mins < 1) return "just now"; if (mins < 60) return mins + " minute" + (mins === 1 ? "" : "s") + " ago"; var h = Math.round(mins / 60); return h + " hour" + (h === 1 ? "" : "s") + " ago"; }
+
+  function powerLine(id, r) {
+    if (id === "suddenShutdowns") { if (r.verdict === "not_checked") return "Couldn't check."; if (r.count === 0 && !r.ranFlatCount) return "None in the last 30 days."; var classes = {}; (r.classes || []).forEach(function (c) { classes[c] = (classes[c] || 0) + 1; }); var parts = Object.keys(classes).map(function (c) { return classes[c] + " " + (SHUTDOWN_CLASS[c] || c).toLowerCase(); }); return r.count + " sudden shutdown" + (r.count === 1 ? "" : "s") + (parts.length ? " (" + parts.join(", ") + ")" : "") + (r.ranFlatCount ? " · battery ran out " + r.ranFlatCount + " time(s)" : ""); }
+    if (id === "batteryAndCharger") { if (r.verdict === "no-battery") return "This PC has no battery."; if (r.verdict === "not_checked") return "Couldn't check."; var bits = []; if (r.health != null) bits.push("health " + r.health + "%"); else bits.push("couldn't read health on this PC"); if (r.chargerEpisodeDays) bits.push("charger flickered on " + r.chargerEpisodeDays + " day(s)"); if (r.diedOnBatteryCount) bits.push("ran out " + r.diedOnBatteryCount + " time(s)"); if (r.diedPluggedInCount) bits.push("died while plugged in " + r.diedPluggedInCount + " time(s)"); return bits.join(" · "); }
+    if (id === "sleepTimers") { if (r.verdict === "not_checked") return "Couldn't check" + (r.note ? " (" + r.note + ")" : "") + "."; if (r.verdict === "never-sleeps") return "Set to never sleep."; var line = "Sleeps after " + r.standbyMinutes + " minute" + (r.standbyMinutes === 1 ? "" : "s") + " alone" + (r.videoConLockSeconds != null ? ", " + r.videoConLockSeconds + "s after it locks" : "") + "."; if (r.verdict === "soon") line += " You said this PC should keep running."; return line; }
+    if (id === "restartWaiting") return r.verdict === "restart-waiting" ? "Yes - a restart is waiting." : r.verdict === "possibly" ? "Possibly." : r.verdict === "not_checked" ? "Couldn't check." : "No.";
+    if (id === "startupHealth") { if (r.total === undefined) return "Couldn't check."; var s = r.total + " set to run"; if (r.neverFairChance) s += "; " + r.neverFairChance + " never got a fair chance"; if (r.failed) s += "; " + r.failed + " failed"; if (r.vbsCount) s += "; " + r.vbsCount + " use VBScript, which Windows is removing"; return s; }
+    if (id === "diskSpace") { if (r.verdict === "not_checked" || !r.drives || !r.drives.length) return "Couldn't check."; return r.drives.map(function (d) { return d.drive + " " + (d.verdict === "not_checked" ? "couldn't check" : d.freeGb + " GB free (" + d.percentFree + "%)"); }).join(" · "); }
+    if (id === "speedCap") return r.verdict === "full-speed" ? "Running at full speed." : r.verdict === "capped" ? "Running below full speed." : r.verdict === "unclear" ? "Not busy enough to tell - try again while it's doing something." : "Not checked yet - press Check speed.";
+    return "";
+  }
+  function doorLine(id, r) {
+    var extra = "";
+    if (id === "remoteSupport" && r.tools && r.tools.length) extra = " (" + r.tools.join(", ") + ")";
+    if (id === "leftovers" && r.findingsCount) extra = " (" + r.findingsCount + ")";
+    return (DOOR_LABEL[id][r.verdict] || r.verdict) + extra;
+  }
+
+  function renderDoorsList(v) {
+    var box = $("drDoors"); clear(box);
+    box.appendChild(el("h2", null, "Doors"));
+    DOOR_ORDER.forEach(function (id) {
+      var r = v.doors[id], cls = rowClass(r.verdict);
+      var card = el("div", "card doors"); card.appendChild(el("div", "bar " + (cls === "open" ? "high" : cls)));
+      var b = el("div", "body"), row = el("div", "verdict-row");
+      row.appendChild(el("span", "prog", DOOR_TITLE[id]));
+      row.appendChild(el("span", "v " + cls, cls === "open" ? "Open" : cls === "unsure" ? "Couldn't check" : "Shut"));
+      b.appendChild(row);
+      b.appendChild(el("div", "where", doorLine(id, r)));
+      if (id === "remoteDesktop" && v.managed) b.appendChild(el("div", "note", "Set by your organisation - ask IT if you need it off."));
+      b.appendChild(el("div", "note", id === "remoteDesktop" ? "Settings > System > Remote Desktop > Off." : id === "extraAccount" ? "Settings > Accounts > Other users - remove its admin rights or give it a password." : id === "diskEncryption" ? "Settings > Privacy & security > Device encryption, or Control Panel > BitLocker on Pro." : id === "remoteSupport" ? "Settings > Apps > Installed apps > Uninstall, if you didn't put this here yourself." : id === "antivirus" ? "Windows Security > Virus & threat protection." : "Scan before you delete anything Hideout flagged."));
+      card.appendChild(b); box.appendChild(card);
+    });
+  }
+  function powerBarClass(id, r) {
+    if (r.verdict === "not_checked") return "unsure";
+    if (id === "startupHealth") return (r.failed || r.neverFairChance) ? "unsure" : "shut";
+    if (id === "diskSpace") { var ds = r.drives || []; return ds.some(function (d) { return d.verdict === "fix-now"; }) ? "high" : ds.some(function (d) { return d.verdict === "soon"; }) ? "unsure" : "shut"; }
+    if (["fix-now", "restart-waiting", "capped"].indexOf(r.verdict) >= 0) return "high";
+    if (["soon", "note", "possibly", "paused"].indexOf(r.verdict) >= 0) return "unsure";
+    return "shut";
+  }
+  function renderPowerList(v) {
+    var box = $("drPower"); clear(box);
+    box.appendChild(el("h2", null, "Power"));
+    POWER_ORDER.forEach(function (id) {
+      var r = v.power[id];
+      var card = el("div", "card doors"); card.appendChild(el("div", "bar " + powerBarClass(id, r)));
+      var b = el("div", "body");
+      b.appendChild(el("div", "prog", POWER_TITLE[id]));
+      b.appendChild(el("div", "where", powerLine(id, r)));
+      if (id === "startupHealth" && r.tasks && r.tasks.length) {
+        var d = el("details", "details"); d.appendChild(el("summary", null, "Details (" + r.tasks.length + ")"));
+        var ul = el("ul", "deep"); r.tasks.forEach(function (t) { ul.appendChild(el("li", null, t.name + " - " + t.result.replace(/-/g, " "))); }); d.appendChild(ul); b.appendChild(d);
+      }
+      card.appendChild(b); box.appendChild(card);
+    });
+  }
+  var speedArmed = false;
+  var RECOVERY = [
+    { title: "Right now, if it's still happening", exact: "Hang up. Turn Wi-Fi off, or pull the network cable. Never read a code from your phone or email to anyone, never buy a gift card, never call a number in a pop-up." },
+    { title: "Scan before anyone touches anything", exact: "Hideout's quick scan and the doors quick check already ran on their own. For the admin-only readings, click \"Deep check (admin)\" and click Yes on the Windows prompt." },
+    { title: "Tell Hideout the day things went wrong", exact: "Type the date on the Money tab. Hideout lists the money that left, and the accounts whose password was last set before that day." },
+    { title: "Lock down A - a remote-support program you didn't install", exact: "Settings > Apps > Installed apps > find it > Uninstall. If it's running right now, do \"Right now\" first." },
+    { title: "Lock down B - an extra admin account that may have no password", exact: "Settings > Accounts > Other users > that account > Change account type > Standard user. Then give it a password: Control Panel > User Accounts > Manage another account." },
+    { title: "Lock down C - Remote Desktop", exact: "Settings > System > Remote Desktop > Off. On a work PC this is set by your organisation - ask IT instead." },
+    { title: "Change every password set before that day - from a different device", exact: "On your phone or another computer: email first, then bank and money apps, then Windows, then everything else. Hideout never sees, generates, enters or stores a password." },
+    { title: "Two-step sign-in, bank check, call the bank", exact: "Each account's Security settings > Two-step verification > On. Check your bank's recent activity. Call the number on your card, never one from an email or pop-up." },
+    { title: "Windows Security scans - only after the lock-down steps", exact: "Virus & threat protection > Scan options > Custom scan on the folder Hideout flagged > then a Full scan. Hideout never starts a scan itself." },
+    { title: "Delete leftovers - only after the scan cleared them", key: "leftovers", exact: "File Explorer > the folder Hideout named > Delete. This card unlocks once a Windows Security scan clears it, or you tell the guide the folder scan is done." },
+    { title: "Harden for next time - disk encryption, and the auto sign-in tradeoff", key: "harden", exact: "Turn on device encryption for your edition of Windows, and save the recovery key somewhere off this PC. Auto sign-in is a tradeoff - only after lock-down A-C are done." },
+    { title: "If it keeps dying or slowing down (no break-in)", exact: "Read the Power list above: sudden shutdowns, battery health, charger episodes, sleep timers. A new battery or charger is your decision and your money - Hideout only explains." },
+  ];
+  function renderRecovery(v) {
+    var box = $("drRecovery"); clear(box);
+    box.appendChild(el("h2", null, "What to do, in order"));
+    var deleteLocked = !(v && v.doors && v.doors.leftovers && v.doors.leftovers.deleteAllowed);
+    RECOVERY.forEach(function (step, i) {
+      var locked = step.key === "leftovers" && deleteLocked;
+      var greyed = step.key === "harden"; // ungates once lock-down A-C are recorded (PR3/4's case steps)
+      var c = el("div", "xcard" + (locked ? " locked" : "") + (greyed ? " greyed" : ""));
+      c.appendChild(el("div", "rung", "Step " + (i + 1)));
+      c.appendChild(el("h3", null, step.title));
+      c.appendChild(el("div", "meta", step.exact));
+      if (step.key === "leftovers" && !deleteLocked) c.appendChild(el("div", "note", "Unlocked: " + (v.doors.leftovers.unlockedBy === "evidence" ? "a Windows Security scan cleared it." : "you told Hideout the folder scan is done.")));
+      box.appendChild(c);
+    });
+  }
+  function renderDoors(v) {
+    var badge = $("tabBtnDoors").querySelector(".badge");
+    if (v && v.summary.openCount) { if (!badge) { badge = el("span", "badge"); $("tabBtnDoors").appendChild(badge); } badge.textContent = String(v.summary.openCount); }
+    else if (badge) badge.remove();
+    var dot = $("drDot"), head = $("drHead"), sub = $("drSub");
+    if (!v) { dot.className = "dot"; dot.textContent = "…"; head.textContent = "Checking doors & power..."; return; }
+    if (v.summary.openCount) { dot.className = "dot high"; dot.textContent = String(v.summary.openCount); head.textContent = v.summary.headline; }
+    else if (v.summary.notCheckedCount) { dot.className = "dot unsure"; dot.textContent = "!"; head.textContent = v.summary.headline; }
+    else { dot.className = "dot clean"; dot.textContent = "✓"; head.textContent = v.summary.headline; }
+    var stamps = []; if (v.minutesAgo.quick != null) stamps.push("checked " + ago(v.minutesAgo.quick)); if (v.minutesAgo.slow != null) stamps.push("deeper checks " + ago(v.minutesAgo.slow));
+    sub.textContent = stamps.length ? stamps.join(" · ") : "The quick check runs in seconds; the slower checks fill in over the next minute.";
+    renderDoorsList(v); renderPowerList(v); renderRecovery(v);
+  }
+  $("btnDoorsCheck").addEventListener("click", function () { post("/api/doors/check", {}); $("drJob").textContent = "Checking doors & power..."; });
+  $("btnDoorsAdmin").addEventListener("click", function () { $("drJob").textContent = "Windows will ask for permission - click Yes on the prompt."; post("/api/scan", { kind: "hunt-admin" }); });
+  $("btnDoorsSpeed").addEventListener("click", function () {
+    if (!speedArmed) { speedArmed = true; $("btnDoorsSpeed").textContent = "The fan may spin up for a few seconds - click again to run it"; setTimeout(function () { speedArmed = false; $("btnDoorsSpeed").textContent = "Check speed"; }, 5000); return; }
+    speedArmed = false; $("btnDoorsSpeed").textContent = "Check speed"; $("drJob").textContent = "Running a short speed check (about 10 seconds)...";
+    post("/api/doors/speed", {});
+  });
+
   // ---------------- guide ----------------
   // Minimal, safe markdown: paragraphs, numbered / bullet lists, **bold**, `code`.
   function inline(parent, text) {
@@ -551,15 +722,19 @@
   // ---------------- live state ----------------
   fetch("/api/state").then(function (r) { return r.json(); }).then(function (s) {
     state.ai = !!s.ai; $("ver").textContent = s.version === "dev" ? "dev build" : "v" + s.version;
-    renderMemory(s.memory); renderMoney(s.money);
+    renderMemory(s.memory); renderMoney(s.money); renderDoors(s.doors);
     if (!s.ai) $("aiNote").textContent = "The AI guide isn't connected on this PC. Scans still work.";
     renderWorker(s.worker);
   });
   var es = new EventSource("/api/events");
-  es.addEventListener("state", function (e) { try { var d = JSON.parse(e.data); renderWorker(d.worker); renderMemory(d.memory); renderMoney(d.money); } catch (x) {} });
+  es.addEventListener("state", function (e) { try { var d = JSON.parse(e.data); renderWorker(d.worker); renderMemory(d.memory); renderMoney(d.money); renderDoors(d.doors); } catch (x) {} });
   es.addEventListener("job", function (e) {
-    try { var j = JSON.parse(e.data);
-      if (j.state === "running" || j.state === "queued") { $("pill").textContent = "Scanning"; $("pill").className = "pill busy"; $("job").textContent = label(j.kind) + ": " + (j.progress || "working..."); ["btnScan", "btnHunt", "btnHuntAdmin"].forEach(function (id) { $(id).disabled = true; }); }
+    try {
+      var j = JSON.parse(e.data);
+      if (j.state !== "running" && j.state !== "queued") return;
+      $("pill").textContent = "Scanning"; $("pill").className = "pill busy";
+      if (MAIN_KINDS.indexOf(j.kind) >= 0) { $("job").textContent = label(j.kind) + ": " + (j.progress || "working..."); ["btnScan", "btnHunt", "btnHuntAdmin"].forEach(function (id) { $(id).disabled = true; }); if (j.kind === "hunt-admin") $("btnDoorsAdmin").disabled = true; }
+      else { $("drJob").textContent = label(j.kind) + ": " + (j.progress || "working..."); ["btnDoorsCheck", "btnDoorsSpeed"].forEach(function (id) { $(id).disabled = true; }); }
     } catch (x) {}
   });
 })();

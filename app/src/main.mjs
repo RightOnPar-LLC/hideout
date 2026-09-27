@@ -12,6 +12,7 @@ import { Guide, directTransport, gatewayTransport, lockedFetch } from "./guide.m
 import { Brain } from "./brain.mjs";
 import { Money } from "./money/money.mjs";
 import { listInstalled } from "./money/pc.mjs";
+import { Doors } from "./doors/doors.mjs";
 import { makeRedactor, collectIdentity } from "./redact.mjs";
 
 const dir = dataDir();
@@ -59,6 +60,7 @@ const engine = ensureEngine({ repoRoot });
 const brain = new Brain({ exe: brainExe({ repoRoot }), dir: path.join(dir, "brain"), log });
 const worker = new Worker({ engine, dir, brain });
 const money = new Money({ brain, log });
+const doors = new Doors({ worker, brain, money, log });
 const guide = new Guide({
   transport: makeTransport(),
   worker, brain, money,
@@ -87,7 +89,7 @@ function listenForShow(launchUrl) {
 alreadyRunning().then((running) => {
   if (running) { log("second launch - showed the open window"); console.log("Hideout is already open - bringing its window forward."); process.exit(0); }
 }).then(() => brain.start()).then((ok) => log(`brain ${ok ? "ready (tpm, private to this PC)" : "unavailable: " + brain.why}`)).then(() => startServer({
-  worker, guide, brain, money, uiHtml, version, log,
+  worker, guide, brain, money, doors, uiHtml, version, log,
   open: args.has("--no-open") ? null : (url) => openWindow(url, path.join(dir, "window")),
   onIdleExit: () => { log("window closed - exiting"); brain.stop(); process.exit(0); },
 })).then((srv) => {
@@ -95,7 +97,12 @@ alreadyRunning().then((running) => {
   log(`started v${version} on 127.0.0.1:${srv.port} (ai=${guide.transport ? guide.transport.kind : "off"}, memory=${brain.available})`);
   if (args.has("--print-url")) console.log(srv.launchUrl);
   else console.log(`Hideout is running (window opened). Close the window to quit.`);
-  worker.enqueue("scan"); // first look happens on its own
+  const firstScan = worker.enqueue("scan"); // first look happens on its own
+  worker.enqueue("doors-quick"); // its own lane - never waits on the scan above
+  // The slow doors pass runs once per launch, staggered after the first scan so the two
+  // don't both hit disk/CPU at the same moment on an ordinary PC; it still never blocks a
+  // person-clicked scan or deep check (see worker.mjs's two-lane note).
+  firstScan.done.then(() => worker.enqueue("doors-slow"));
   // Installed programs (read-only), for "on your PC and on your bill" and remote-access tools.
   listInstalled().then((list) => { money.installed = list || []; money.onChange?.(); log(`installed programs: ${list ? list.length : "unreadable"}`); });
 }).catch((e) => { log(`could not start: ${e && e.message}`); console.error("Hideout could not start."); process.exit(1); });
