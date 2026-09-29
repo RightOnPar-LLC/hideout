@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node src/server.mjs",
-    "test": "node tests/selftest.mjs && node tests/money.selftest.mjs",
+    "test": "node tests/selftest.mjs && node tests/money.selftest.mjs && node tests/doors.selftest.mjs",
     "build-exe": "powershell -NoProfile -ExecutionPolicy Bypass -File build-exe.ps1"
   },
   "dependencies": {

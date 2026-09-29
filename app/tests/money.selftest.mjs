@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
+import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
 import { parseStatement, parseDelimited, parseAmount, parseDate, maskDigits, classify } from "../src/money/statement.mjs";
@@ -15,7 +16,7 @@ import { Money, packRows, unpackRows } from "../src/money/money.mjs";
 import { parseInstalled, remoteToolsIn, INSTALLED_SCRIPT } from "../src/money/pc.mjs";
 import { Guide, gatewayTransport } from "../src/guide.mjs";
 import { MODEL, validateToolInput } from "../src/guide-spec.mjs";
-import { makeRedactor } from "../src/redact.mjs";
+import { makeRedactor, collectIdentity } from "../src/redact.mjs";
 import { startServer } from "../src/server.mjs";
 import { Brain } from "../src/brain.mjs";
 import { createGateway } from "../../gateway/server.mjs";
@@ -283,9 +284,57 @@ function request(port, { method = "GET", path: p = "/", headers = {}, body } = {
   check("F1 Money's engine has no network and runs no programs", !/\bfetch\(|node:http|node:https|child_process|(?<![.\w])spawn\(|(?<![.\w])exec\(|writeFile|unlink/.test(moneySrc));
   check("F2 the installed-programs read only reads (Get-ItemProperty; no Set/Remove/New/Start)", /Get-ItemProperty/.test(INSTALLED_SCRIPT) && !/\b(Set|Remove|New|Start|Stop|Invoke|Uninstall)-/.test(INSTALLED_SCRIPT));
   check("F3 the only thing the server opens is a URL the directory vouched for", /money\.cancelUrl\(/.test(code("src/server.mjs")) && !/openUrl\(\s*body/.test(code("src/server.mjs")));
-  const shipped = fs.readdirSync(path.join(APP, "src"), { recursive: true }).filter((f) => /\.(mjs|md)$/.test(f)).map((f) => src(path.join("src", f))).concat(src("ui/index.html"), src("data/merchants.json")).join("\n").toLowerCase();
-  const me = [os.userInfo().username, process.env.COMPUTERNAME].filter((n) => n && n.length > 3).map((n) => n.toLowerCase());
-  check("F4 the builder's own account and PC name never end up in shipped files", me.every((n) => !shipped.includes(n)));
+  // F4, widened (public-repo-hygiene PR0): the FILE SET is every text file `git ls-files`
+  // returns for the whole repo - not only app/src/**, ui/index.html and data/merchants.json
+  // - because the leak this guards against (the governance engine's private-template door,
+  // AGENTS.md / .github/copilot-instructions.md) lives at the repo ROOT, outside app/ entirely.
+  const ROOT = path.resolve(APP, "..");
+  const BINARY_EXT = /\.(png|jpe?g|gif|ico|exe|dll|zip|pdf|woff2?|ttf|eot|wav|mp3|mp4)$/i;
+  const trackedFiles = execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" }).split("\n").map((f) => f.trim()).filter((f) => f && !BINARY_EXT.test(f));
+  const shippedText = trackedFiles.map((f) => { try { return fs.readFileSync(path.join(ROOT, f), "utf8"); } catch { return ""; } }).join("\n").toLowerCase();
+  // The IDENTIFIER LIST is widened the same way: username + COMPUTERNAME (as before) plus
+  // the home-folder name and every name collectIdentity() returns (redact.mjs:14-28) - the
+  // two-name list here would not have caught a profile-folder name in the door files.
+  // "user"/"admin"/etc. are excluded: a plain profile-folder-exclusion gap in collectIdentity
+  // (measured on this machine - a literal "user" folder under C:\Users survives its
+  // /^(public|default|default user|all users)$/i exclude) turns a common dictionary word
+  // into a false positive across nearly every file; filtered here, not in redact.mjs (see
+  // doors.selftest.mjs for why that fix belongs to a dedicated change, not this one).
+  const NOISE = new Set(["user", "users", "admin", "administrator", "guest", "test", "default", "public", "owner", "service", "temp"]);
+  const id = collectIdentity();
+  const identifiers = (fn) => [...new Set([os.userInfo().username, process.env.COMPUTERNAME, path.basename(os.homedir()), id.computer, ...id.names])]
+    .filter((n) => n && n.length > 3 && !NOISE.has(n.toLowerCase()))
+    .map((n) => n.toLowerCase())
+    .filter(fn);
+  const me = identifiers(() => true);
+  const identityHits = (text, names) => names.filter((n) => text.includes(n));
+  check("F4 no builder identity (account, PC name, home-folder name, or any local profile name) ends up in ANY tracked file, not just app/src", identityHits(shippedText, me).length === 0, identityHits(shippedText, me).join(", "));
+  // Negative control (proves F4 isn't vacuously green): a synthetic "shipped" string that
+  // plants the home-folder name / an identifier makes the SAME check go red.
+  check("F4b negative control: a fixture string carrying an identifier is caught", me.length > 0 && identityHits(`totally normal text ${me[0]} more text`, me).length === 1);
+  check("F4c negative control: a fixture string carrying none of them stays clean", identityHits("totally normal text with no identifiers at all", me).length === 0);
+  // F4d, added (public-repo-hygiene follow-up review, 2026-09-26): F4 above only catches
+  // PERSONAL identity strings (a builder's own account/PC/profile name). It would NOT have
+  // caught the estate-root path literal ("<drive>:/projects/..." shaped) doors.selftest.mjs's
+  // own estatePatterns() briefly shipped and a prior fix removed - none of that machine's
+  // identity strings appear in a bare filesystem path. Widened here with a STRUCTURAL,
+  // no-proper-noun pattern (any drive letter, no hardcoded org/estate word - safe to ship)
+  // so a planted estate-root path literal in ANY tracked file goes red on `npm test`, not
+  // only when the estate's own private governance.config.json happens to be on the machine
+  // running the check. Mirrors doors.selftest.mjs's own "drive-root-projects-path" GENERIC_FORBID
+  // entry (duplicated rather than imported - doors.selftest.mjs's module body runs its own
+  // D1-D5 checks and calls process.exit() at import time, so importing it here would exit this
+  // suite early before F5/F6 ever ran).
+  const PROJECT_PATH_SHAPE = /\b[a-z]:[\\/](?:[\w.-]+[\\/])*projects\b/i;
+  check("F4d no absolute drive-letter '<drive>:/projects/...' path literal (the estate-root path SHAPE) ends up in any tracked file", !PROJECT_PATH_SHAPE.test(shippedText));
+  // Negative control, built so this file's OWN source never contains the shape it's testing
+  // for (a literal fixture here would trip the very check above, since F4 scans this file's
+  // own tracked text too) - the drive-path is assembled at RUNTIME from pieces that are never
+  // adjacent in the source.
+  const fixtureRootWord = ["proj", "ects"].join("");
+  const fixtureDrivePath = ["f", ":", "/", fixtureRootWord, "/fake/example.json"].join("");
+  check("F4e negative control: a runtime-assembled fixture carrying the path SHAPE is caught (proves F4d isn't vacuous)", PROJECT_PATH_SHAPE.test(fixtureDrivePath));
+  check("F4f negative control: ordinary prose with no such path stays clean", !PROJECT_PATH_SHAPE.test("totally normal text with no drive-letter path at all"));
   check("F5 the guide is told it never logs in, cancels or sends", /never logs into accounts, cancels anything, or sends email/.test(src("src/guide-spec.mjs")));
   check("F6 letters never state facts the person did not give: unconfirmed lines go in [Confirm: ...] brackets", /Never state a fact the person hasn't told you and Hideout doesn't show/.test(src("src/guide-spec.mjs")) && src("src/guide-spec.mjs").includes("[Confirm: "));
 }
@@ -332,4 +381,19 @@ function request(port, { method = "GET", path: p = "/", headers = {}, body } = {
 }
 
 console.log(`\nhideout money selftest: ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+// MEASURED on this machine (Node v26.1.0, Windows): an immediate process.exit() here
+// deterministically (5/5 repeated runs, including on the unmodified file from origin/main)
+// tripped a native libuv assertion (`UV_HANDLE_CLOSING`, src/win/async.c) and aborted the
+// process AFTER every check had already passed - a red exit code behind a clean test run.
+// Root cause: the global `fetch()` the E1 test uses (gatewayTransport -> Node's built-in
+// undici) creates a process-wide connection-pool dispatcher on first use that is not
+// reference-counted away on `server.close()`; closing it isn't reachable from userland on
+// this Node build (no `node:undici` export here to call `getGlobalDispatcher().close()`).
+// Plain `process.exitCode` (no forced exit) proved the dispatcher's own timer never drains
+// on its own either - it hung past 90s instead of crashing. A short, empirically-checked
+// delay before the same forced exit gives that one background timer time to go idle first,
+// so the exit no longer races a closing handle: 16/16 clean runs (money + app selftest) at
+// 1500ms, 0/16 at this delay's floor (200ms still crashed 1/5). This is a known undici/Node
+// gotcha (a process holding open after `fetch()`), not a bug this PR introduced or fixes at
+// the source - flagged for a dedicated follow-up rather than a deeper rewrite here.
+setTimeout(() => process.exit(fail ? 1 : 0), 1500);
