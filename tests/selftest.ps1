@@ -49,6 +49,99 @@ $tplCode = [regex]::Replace($tpl, '(?m)//.*$', '')
 Check 'S4 report never builds HTML from data (no innerHTML / insertAdjacentHTML / document.write / eval)' (-not ($tplCode -match 'innerHTML|insertAdjacentHTML|document\.write|eval\(|new Function'))
 Check 'S5 report loads nothing from the network (CSP default-src none)' ($tpl -match "default-src 'none'" -and -not ($tpl -match 'https?://'))
 
+# ---------------------------------------------------------------- doors (read-only, ASCII, mirrored helpers)
+$doorsPath = Join-Path $App 'doors.ps1'
+$doorsSrc = Get-Content -LiteralPath $doorsPath -Raw
+$doorsCodeRaw = [regex]::Replace([regex]::Replace($doorsSrc, '(?s)<#.*?#>', ''), '(?m)#.*$', '')
+$doorsCode = [regex]::Replace($doorsCodeRaw, "'[^']*'", "''")
+$doorsHits = @($forbidden | Where-Object { $doorsCode -match [regex]::Escape($_) })
+Check 'S11 doors is read-only (same forbidden list as hunt/hideout)' ($doorsHits.Count -eq 0) ($doorsHits -join ', ')
+Check 'S12 doors is ASCII-only' (-not ($doorsSrc -match '[^\x00-\x7F]'))
+
+# publicRepoGuards item 5: the doors-specific forbidden list, over the code with single-quoted
+# STRING LITERALS blanked (the firewall group id and comments discussing these words as
+# things doors.ps1 must never do are data, not commands).
+$doorsForbidden = 'Start-Job', 'Start-MpScan', 'Set-MpPreference', 'Disable-LocalUser', 'Enable-LocalUser', 'Remove-LocalUser', 'Set-LocalUser',
+                  'Enable-BitLocker', 'manage-bde', 'Suspend-BitLocker', 'Register-ScheduledTask', 'powercfg /set', '/change', '/setactive', '/h',
+                  'wevtutil sl', 'Set-NetFirewallRule', 'dsregcmd', 'qwinsta', 'CurrentClockSpeed', 'CommandLine', 'RecoveryPassword', 'DisplayGroup'
+$doorsForbiddenHits = @($doorsForbidden | Where-Object { $doorsCode -match [regex]::Escape($_) })
+Check 'S13 doors carries none of the doors-specific forbidden strings (write cmdlets, BitLocker mutators, clock-speed, full command lines, recovery keys, locale-bound firewall matching)' ($doorsForbiddenHits.Count -eq 0) ($doorsForbiddenHits -join ', ')
+Check 'S14 doors uses the locale-proof Remote Desktop firewall group id' ($doorsSrc -match [regex]::Escape('@FirewallAPI.dll,-28752'))
+# Negative control: the guard above must actually fire on a planted violation, or it is
+# checking nothing (publicRepoGuards item 5's own requirement).
+$negPath = Join-Path ([IO.Path]::GetTempPath()) ('doors-negctrl-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.ps1')
+try {
+  Set-Content -LiteralPath $negPath -Value ($doorsSrc + "`nStart-MpScan | Out-Null`n") -Encoding ascii
+  $negSrc = Get-Content -LiteralPath $negPath -Raw
+  $negCode = [regex]::Replace([regex]::Replace($negSrc, '(?s)<#.*?#>', ''), '(?m)#.*$', '')
+  $negCode = [regex]::Replace($negCode, "'[^']*'", "''")
+  $negHits = @($doorsForbidden | Where-Object { $negCode -match [regex]::Escape($_) })
+  Check 'S13n negative control: a planted Start-MpScan makes S13''s own check go red' ($negHits.Count -gt 0)
+} finally { Remove-Item -LiteralPath $negPath -Force -ErrorAction SilentlyContinue }
+
+# publicRepoGuards item 4 / the risk about factoring Section/Get-Redacted into a shared file:
+# doors.ps1 mirrors hunt.ps1's two helpers byte-for-byte instead, and this is the check that
+# keeps that promise true - drift here means the helper quietly grew two homes.
+function Get-MirroredBlock([string]$src, [string]$pattern) {
+  $m = [regex]::Match($src, $pattern)
+  if ($m.Success) { return $m.Value } else { return $null }
+}
+$redactedPattern = '\$redactor = \[System\.Text\.RegularExpressions\.MatchEvaluator\][\s\S]*?\nfunction Get-Redacted\(\[string\]\$s\)[\s\S]*?\r?\n\}\r?\n'
+$sectionPattern = '\$report = \[ordered\]@\{\}\r?\nfunction Section\(\[string\]\$name, \[scriptblock\]\$body\)[\s\S]*?\r?\n\}\r?\n'
+$huntRedacted = Get-MirroredBlock $huntSrc $redactedPattern
+$doorsRedacted = Get-MirroredBlock $doorsSrc $redactedPattern
+$huntSection = Get-MirroredBlock $huntSrc $sectionPattern
+$doorsSection = Get-MirroredBlock $doorsSrc $sectionPattern
+Check 'S15 doors'' Get-Redacted (+ $redactor) is byte-identical to hunt''s' ($huntRedacted -and $doorsRedacted -and ($huntRedacted -ceq $doorsRedacted)) 'blocks differ or one was not found'
+Check 'S16 doors'' Section helper is byte-identical to hunt''s' ($huntSection -and $doorsSection -and ($huntSection -ceq $doorsSection)) 'blocks differ or one was not found'
+
+# The recovery-key guard on hunt.ps1's new 'bitlocker' Section (engineChecks doors.diskEncryption,
+# publicRepoGuards item 6): lift the shaping function out and run it against a fixture volume
+# carrying a FAKE 48-digit recovery key, with a negative control proving the test itself is not
+# vacuous (the raw, unshaped fixture DOES match the same regex).
+$shapeFn = [regex]::Match($huntSrc, '(?s)function Get-BitlockerShape.*?\n\}\r?\n').Value
+Check 'F2 found Get-BitlockerShape to lift out of hunt.ps1' ([bool]$shapeFn)
+if ($shapeFn) {
+  . ([scriptblock]::Create($shapeFn))
+  $fakeVolume = [pscustomobject]@{
+    MountPoint = 'C:'; VolumeStatus = 'FullyEncrypted'; ProtectionStatus = 'On'; EncryptionPercentage = 100
+    KeyProtector = @([pscustomobject]@{ KeyProtectorType = 'RecoveryPassword'; RecoveryPassword = '123456-234567-345678-456789-567890-678901-789012-890123' })
+  }
+  $shaped = Get-BitlockerShape @($fakeVolume) | ConvertTo-Json -Depth 6
+  $keyRegex = '\d{6}(-\d{6}){7}'
+  Check 'F3 the shaped bitlocker section never serializes a recovery-key-shaped string' (-not ($shaped -match $keyRegex)) $shaped
+  $rawShaped = @($fakeVolume) | ConvertTo-Json -Depth 6
+  Check 'F3n negative control: the SAME fixture, unshaped, does match the key regex (proves F3 is not vacuous)' ($rawShaped -match $keyRegex)
+}
+
+# ---------------------------------------------------------------- doors live shape run (quick pass only - seconds, no fixture)
+$doorsOut = Join-Path ([IO.Path]::GetTempPath()) ('doors-shape-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
+try {
+  $sw = [Diagnostics.Stopwatch]::StartNew()
+  & $Host_ -NoProfile -ExecutionPolicy Bypass -File $doorsPath -Pass quick -Out $doorsOut | Out-Null
+  $sw.Stop()
+  # Budget set generously for a CI box, not tuned to this one - the spec's own per-check
+  # measurements here were 0.3-1.1s each across 8 quick-pass sections.
+  Check 'D1 doors -Pass quick exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
+  Check 'D2 doors -Pass quick finishes well inside its seconds-not-minutes budget' ($sw.Elapsed.TotalSeconds -lt 20) "$($sw.Elapsed.TotalSeconds)s"
+  $doorsJsonText = Get-Content -LiteralPath $doorsOut -Raw
+  Check 'D3 doors output never carries the 5.1 slash-Date wrapper' (-not ($doorsJsonText -match '\\/Date\('))
+  $doorsResult = $doorsJsonText | ConvertFrom-Json
+  Check 'D4 doors output is the quick pass' ($doorsResult.pass -eq 'quick')
+  $quickSections = 'remoteDesktopRegistry', 'extraAccount', 'diskEncryption', 'remoteSupportInstalled', 'restartWaiting', 'diskSpace', 'sleepTimers', 'battery'
+  $missing = @($quickSections | Where-Object { -not $doorsResult.sections.PSObject.Properties.Name.Contains($_) })
+  Check 'D5 every quick-pass section is present' ($missing.Count -eq 0) ($missing -join ', ')
+  $badShape = @($quickSections | Where-Object {
+      $sec = $doorsResult.sections.$_
+      -not ($sec -and $sec.items -and $sec.items.Count -eq 1 -and ($null -ne $sec.items[0].checked) -and ($null -ne $sec.items[0].control))
+    })
+  Check 'D6 every quick-pass Section returns exactly one item shaped {checked, control, facts}' ($badShape.Count -eq 0) ($badShape -join ', ')
+  # Every date-ish field anywhere in the payload matches ISO-8601 or is the empty string.
+  $dateFields = @([regex]::Matches($doorsJsonText, '"(\w*(?:Date|Time|LastSet|LastLogon|LastBoot|Started)\w*)"\s*:\s*"([^"]*)"', 'IgnoreCase'))
+  $badDates = @($dateFields | Where-Object { $_.Groups[2].Value -ne '' -and $_.Groups[2].Value -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}' })
+  Check 'D7 every date field in the live run is ISO-8601 or empty' ($dateFields.Count -gt 0 -and $badDates.Count -eq 0) ($badDates | ForEach-Object { $_.Value })
+} finally { Remove-Item -LiteralPath $doorsOut -Force -ErrorAction SilentlyContinue }
+
 # Test-RandomName, lifted out of the engine and run on known names.
 $fn = [regex]::Match($src, '(?s)function Test-RandomName.*?\n}\r?\n').Value
 . ([scriptblock]::Create($fn))

@@ -28,7 +28,7 @@ export function dataDir() {
 }
 
 export function ensureEngine({ repoRoot } = {}) {
-  const files = ["hideout.ps1", "hunt.ps1", "report.html"];
+  const files = ["hideout.ps1", "hunt.ps1", "report.html", "doors.ps1"];
   let dir, shipped = {};
   if (isPackaged) {
     dir = path.join(dataDir(), "engine");
@@ -48,6 +48,7 @@ export function ensureEngine({ repoRoot } = {}) {
     dir,
     hideout: path.join(dir, "hideout.ps1"),
     hunt: path.join(dir, "hunt.ps1"),
+    doors: path.join(dir, "doors.ps1"),
     // True only if the file on disk is byte-identical to what shipped.
     verify(name) {
       try { return sha(fs.readFileSync(path.join(dir, name), "utf8")) === shipped[name]; } catch { return false; }
