@@ -33,6 +33,9 @@ import {
   clusterEpisodes, summarizeBatteryAndCharger, summarizeSleepTimers, summarizeRestartWaiting,
   summarizeStartupHealth, summarizeDiskSpace, summarizeDiskSpaceGroup, summarizeSpeedCap,
 } from "../src/doors/summarize.mjs";
+import { anonymizeAccounts } from "../src/worker.mjs";
+import { remoteToolsIn, runningRemoteTools, REMOTE_TOOLS } from "../src/money/pc.mjs";
+import { Doors, acOnlineStateAt, qhAgreesWithRegistry } from "../src/doors/doors.mjs";
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT = path.resolve(APP, "..");
@@ -368,6 +371,97 @@ export function checkFabricatedNames(names) {
   check("E13c utility never reaches 60 -> unclear (an idle CPU is never judged)", summarizeSpeedCap({ perf: [95, 96, 94], util: [10, 15, 12] }).verdict === "unclear");
   check("E13d Get-Counter error -> not_checked, never a fallback to clock speed", summarizeSpeedCap({ counterOk: false }).verdict === "not_checked");
   check("E13e no implied clock-speed fallback anywhere in decode/summarize", !/CurrentClockSpeed/.test(fs.readFileSync(path.join(APP, "src/doors/summarize.mjs"), "utf8")) && !/CurrentClockSpeed/.test(fs.readFileSync(path.join(APP, "src/doors/decode.mjs"), "utf8")));
+}
+
+// -- pc.mjs: REMOTE_TOOLS gains a processes column; runningRemoteTools (PR2) --
+{
+  check("F1a every REMOTE_TOOLS entry has a name and at least one process name", REMOTE_TOOLS.every((t) => typeof t.name === "string" && t.name && Array.isArray(t.processes) && t.processes.length > 0));
+  check("F1b remoteToolsIn still matches on the product name (installed-programs list)", remoteToolsIn([{ name: "AnyDesk 8.0", installed: "2026-01-01" }]).map((p) => p.name).join() === "AnyDesk 8.0");
+  check("F1c runningRemoteTools matches a process name that differs from the product name (Zoho Assist runs as ZohoMeeting)", runningRemoteTools(["explorer", "ZohoMeeting"]).map((t) => t.name).join() === "Zoho Assist");
+  check("F1d runningRemoteTools is exact-name, never substring (no false match on an unrelated process)", runningRemoteTools(["rustdeskhelper"]).length === 0);
+  check("F1e no process running -> nothing reported", runningRemoteTools(["explorer", "svchost"]).length === 0);
+  check("F1f case-insensitive match", runningRemoteTools(["ANYDESK"]).map((t) => t.name).join() === "AnyDesk");
+}
+
+// -- worker.mjs / doors.mjs: anonymizeAccounts - the "account n" name treatment (PR2) --
+{
+  check("F2a a plain name-string list becomes positional labels, in order", JSON.stringify(anonymizeAccounts(["Nina", "helper-account"])) === JSON.stringify(["account 1", "account 2"]));
+  check("F2b a record list keeps every OTHER field but drops the name, and gains a positional id", JSON.stringify(anonymizeAccounts([{ name: "Nina", type: "administrator", source: "Local" }])) === JSON.stringify([{ type: "administrator", source: "Local", id: "account 1" }]));
+  check("F2c an empty list stays empty (never throws)", anonymizeAccounts([]).length === 0 && anonymizeAccounts().length === 0);
+  check("F2d no fixture name survives anonymizeAccounts, whichever shape it was given", !/Nina|helper-account/.test(JSON.stringify(anonymizeAccounts(["Nina", { name: "helper-account", type: "user" }]))));
+}
+
+// -- doors.mjs: acOnlineStateAt / qhAgreesWithRegistry (PR2's small pure helpers) --
+{
+  const kp105 = [{ timeCreated: "2026-01-01T00:00:00", acOnline: true }, { timeCreated: "2026-01-02T00:00:00", acOnline: false }];
+  check("F3a the AC state at a moment is the most recent KP105 at or before it", acOnlineStateAt(kp105, Date.parse("2026-01-02T12:00:00")) === false && acOnlineStateAt(kp105, Date.parse("2026-01-01T12:00:00")) === true);
+  check("F3b no KP105 before the moment -> null, never guessed", acOnlineStateAt(kp105, Date.parse("2025-12-31T00:00:00")) === null);
+  check("F3c empty KP105 list -> null", acOnlineStateAt([], Date.now()) === null);
+
+  const qh = "  Power Setting GUID: 29f6c1db-86da-48c5-9fdb-f2b67b1f44da  (Sleep after)\n    Current AC Power Setting Index: 0x00000258\n";
+  check("F3d qh text agreeing with the registry (600s = 0x258) -> true", qhAgreesWithRegistry(qh, "29F6C1DB-86DA-48C5-9FDB-F2B67B1F44DA", 600) === true);
+  check("F3e qh text disagreeing with the registry -> false, never a silent guess", qhAgreesWithRegistry(qh, "29F6C1DB-86DA-48C5-9FDB-F2B67B1F44DA", 30) === false);
+  check("F3f unparseable / missing text -> null (trust the registry, never claim a disagreement that wasn't observed)", qhAgreesWithRegistry("", "29F6C1DB-86DA-48C5-9FDB-F2B67B1F44DA", 600) === null && qhAgreesWithRegistry("nothing useful here", "29F6C1DB-86DA-48C5-9FDB-F2B67B1F44DA", 600) === null);
+}
+
+// -- doors.mjs: the Doors class - wiring, "not checked before any run", deleteAllowed, guideView redaction (PR2) --
+{
+  const fakeWorker = { latestScan: null, latestDoors: { quick: null, slow: null, speed: null }, on() {} };
+  const d0 = new Doors({ worker: fakeWorker });
+  const v0 = d0.view();
+  check("F4a before ANY doors pass has ever run, every door reading is not_checked - never a guessed 'shut'", Object.values(v0.doors).every((r) => r.verdict === "not_checked") && v0.summary.openCount === 0);
+  check("F4a2 every power reading is not_checked too, and the headline counts all 13 (never silently fewer)", Object.values(v0.power).every((r) => r.verdict === "not_checked") && v0.summary.headline === "Couldn't check 13 things");
+  check("F4b a fresh Doors class never crashes with no worker data at all", v0.summary.notCheckedCount > 0);
+
+  const quickSection = (facts, control = {}) => ({ ok: true, items: [{ checked: true, control, facts }] });
+  fakeWorker.latestDoors.quick = {
+    at: "2026-01-01T00:00:00Z",
+    sections: {
+      remoteDesktopRegistry: quickSection({ fDenyTSConnections: 0, remoteSessions: [], partOfDomain: false, entraJoined: false }, { termServicePresent: true }),
+      extraAccount: quickSection({ users: [{ name: "helper-account", enabled: true, passwordRequired: false, passwordLastSet: "", principalSource: "Local" }], administrators: [{ name: "helper-account", source: "Local" }], partOfDomain: false, entraJoined: false }, { builtinsPresent: true }),
+      diskEncryption: quickSection({ drives: [{ drive: "C:", shellProperty: 2 }] }),
+      remoteSupportInstalled: quickSection({ processNames: ["explorer", "svchost"] }, { knownProcessSeen: true }),
+      restartWaiting: quickSection({ rebootRequired: false }, {}),
+      diskSpace: quickSection({ drives: [] }, { systemDrivePresent: false }),
+      sleepTimers: quickSection({ standbyIdle: { ac: 300 }, videoIdle: { ac: 300 } }, { modelListed: true }),
+      battery: quickSection({ hasBattery: false }),
+    },
+  };
+  const v1 = d0.view();
+  check("F5a a real quick pass with no risky account -> extraAccount 'open' from the raw fact (helper-account has no password)", v1.doors.extraAccount.verdict === "open");
+  check("F5b disk encryption off, from the quick shell property", v1.doors.diskEncryption.verdict === "off");
+  check("F5c remote desktop shut (fDeny=1 was not set here, fDeny=0 with no sessions -> open, but firewall never ran -> firewall detail not_checked)", v1.doors.remoteDesktop.verdict === "open" && v1.doors.remoteDesktop.firewallDetail === "not_checked");
+  check("F5d antivirus and leftovers still not_checked - the slow pass hasn't run yet", v1.doors.antivirus.verdict === "not_checked" && v1.doors.leftovers.verdict === "not_checked");
+  const g1 = d0.guideView();
+  check("F5e guideView anonymizes the risky account name (never 'helper-account')", !/helper-account/.test(JSON.stringify(g1)) && Array.isArray(g1.doors.extraAccount.accounts) && g1.doors.extraAccount.accounts[0] === "account 1");
+  check("F5f view() (window-only) is allowed to keep it", v1.doors.extraAccount.accounts.includes("helper-account"));
+
+  // deleteAllowed: findings present, no scan evidence yet -> locked; a scan after the finding -> unlocked by evidence.
+  fakeWorker.latestScan = { findings: [{ severity: "high", program: "evil.exe", arrived: "2026-01-10T00:00:00Z" }] };
+  fakeWorker.latestDoors.slow = { at: "2026-01-05T00:00:00Z", sections: { antivirus: quickSection({ amRunningMode: "Normal", realTimeProtectionEnabled: true, quickScanEndTime: "2026-01-05T00:00:00Z", fullScanEndTime: "" }) } };
+  const v2 = d0.view();
+  check("F6a a finding with an OLDER scan on record -> leftovers flagged, delete locked", v2.doors.leftovers.verdict === "flagged" && v2.doors.leftovers.deleteAllowed === false);
+  fakeWorker.latestDoors.slow.sections.antivirus.items[0].facts.fullScanEndTime = "2026-01-15T00:00:00Z";
+  const v3 = d0.view();
+  check("F6b a scan end time AFTER the finding arrived -> unlocked by evidence", v3.doors.leftovers.deleteAllowed === true && v3.doors.leftovers.unlockedBy === "evidence");
+
+  // startupHealth: task names reach the window, never the guide.
+  fakeWorker.latestDoors.slow.sections.startupHealth = quickSection({ tasks: [{ name: "Photo Sync", path: "\\Photo Sync", state: "Ready", lastTaskResult: 0 }] }, { microsoftTaskSeen: true, vbsLogReadable: true });
+  const v4 = d0.view(), g4 = d0.guideView();
+  check("F7a the window sees the flagged task's name", v4.power.startupHealth.tasks.some((t) => t.name === "Photo Sync"));
+  check("F7b the guide never does - startupHealth carries counts only", !("tasks" in g4.power.startupHealth) && !/Photo Sync/.test(JSON.stringify(g4)));
+
+  // The doors-lane job "done" event triggers remember() and onChange() - the wiring itself.
+  let changed = 0, remembered = null;
+  const fakeBrain2 = { caseFile: () => null, remember: async (kind, data) => { remembered = { kind, data }; return true; } };
+  let handler; const worker2 = { latestScan: null, latestDoors: { quick: null, slow: null, speed: null }, on: (ev, fn) => { handler = fn; } };
+  const d2 = new Doors({ worker: worker2, brain: fakeBrain2 });
+  d2.onChange = () => changed++;
+  await handler({ kind: "doors-quick", state: "done" });
+  await new Promise((r) => setTimeout(r, 10));
+  check("F8a a finished doors-* job tells the window (onChange) and remembers a doors-slice to the case file", changed === 1 && remembered && remembered.kind === "doors" && Object.keys(remembered.data).sort().join() === ["at", "open", "openIds", "notChecked", "shut"].sort().join());
+  await handler({ kind: "scan", state: "done" });
+  check("F8b a non-doors job never triggers it", changed === 1);
 }
 
 console.log(`\nhideout doors selftest: ${pass} passed, ${fail} failed`);

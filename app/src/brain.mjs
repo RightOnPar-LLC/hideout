@@ -147,11 +147,13 @@ export function buildCaseFile(entries) {
   for (const e of byTime) if (e.kind === "step" && Object.hasOwn(CASE_STEPS, e.step) && STEP_STATUS.includes(e.status)) steps[e.step] = { status: e.status, at: e.at };
   const scans = byTime.filter((e) => e.kind === "scan").slice(-10).reverse();
   const deep = byTime.filter((e) => e.kind === "deep").slice(-5).reverse();
+  const doors = byTime.filter((e) => e.kind === "doors").slice(-5).reverse();
   return {
     opened: byTime[0]?.at || null,
     memories: entries.length,
     scans: scans.map(({ at, counts, threats }) => ({ at, counts, threats })),
     deepChecks: deep.map(({ at, admin, notable }) => ({ at, admin, notable })),
+    doorsRuns: doors.map(({ at, open, shut, notChecked, openIds }) => ({ at, open, shut, notChecked, openIds })),
     steps: Object.entries(CASE_STEPS).map(([id, label]) => ({ id, label, status: steps[id]?.status || "not_yet", at: steps[id]?.at || null })),
   };
 }

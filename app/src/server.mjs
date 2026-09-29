@@ -68,7 +68,7 @@ export function openWindow(url, profileDir) {
   else spawn("explorer.exe", [url], { detached: true, stdio: "ignore" }).unref();
 }
 
-export async function startServer({ worker, guide, brain = null, money = null, openUrl = openExternal, uiHtml, version = "dev", open = null, idleExitMs = 90_000, onIdleExit = null, log = () => {} }) {
+export async function startServer({ worker, guide, brain = null, money = null, doors = null, openUrl = openExternal, uiHtml, version = "dev", open = null, idleExitMs = 90_000, onIdleExit = null, log = () => {} }) {
   const token = crypto.randomBytes(32).toString("hex");
   const clients = new Set();
   let port = 0, everConnected = false, lastClient = Date.now();
@@ -84,11 +84,13 @@ export async function startServer({ worker, guide, brain = null, money = null, o
   };
   const memoryState = () => ({ available: !!brain?.available, why: brain?.why || "", caseFile: brain?.caseFile() || null });
   const moneyState = () => { try { return money ? money.view() : null; } catch (e) { log(`money view failed: ${e.message}`); return null; } };
-  const fullState = () => ({ worker: worker.state(), memory: memoryState(), money: moneyState() });
+  const doorsState = () => { try { return doors ? doors.view() : null; } catch (e) { log(`doors view failed: ${e.message}`); return null; } };
+  const fullState = () => ({ worker: worker.state(), memory: memoryState(), money: moneyState(), doors: doorsState() });
   worker.on("job", (j) => broadcast("job", j));
   worker.on("state", () => broadcast("state", fullState()));
   if (brain) brain.onChange = () => broadcast("state", fullState());
   if (money) money.onChange = () => broadcast("state", fullState());
+  if (doors) doors.onChange = () => broadcast("state", fullState());
 
   async function handle(req, res) {
     const origin = `http://127.0.0.1:${port}`;
@@ -117,6 +119,15 @@ export async function startServer({ worker, guide, brain = null, money = null, o
       const ping = setInterval(() => res.write(": ping\n\n"), 15_000);
       req.on("close", () => { clearInterval(ping); clients.delete(res); lastClient = Date.now(); });
       return;
+    }
+
+    if (req.method === "POST" && (p === "/api/doors/check" || p === "/api/doors/speed")) {
+      // Same shape as /api/scan, minus a "kind" - there is only one launcher per route. The
+      // body (the page always sends "{}") is drained like every other POST even though
+      // nothing in it is read, so the connection can be reused instead of left mid-request.
+      try { await readBody(req); } catch (e) { return send(res, e.status || 400, e.status ? "too large" : "bad request"); }
+      const job = worker.enqueue(p === "/api/doors/check" ? "doors-quick" : "doors-speed");
+      return json(res, 202, { id: job.id, state: job.state });
     }
 
     if (req.method === "POST" && p.startsWith("/api/money/")) {

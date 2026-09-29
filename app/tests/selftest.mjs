@@ -16,6 +16,7 @@ import { Guide, lockedFetch, gatewayTransport } from "../src/guide.mjs";
 import { MODEL, SYSTEM_PROMPT, TOOLS, GUIDE_TOOLS, CASE_STEPS, validateToolInput, requestParams } from "../src/guide-spec.mjs";
 import { Brain, parseList, buildCaseFile } from "../src/brain.mjs";
 import { Worker, summarizeHunt } from "../src/worker.mjs";
+import { runProcess, POWERSHELL } from "../src/engine.mjs";
 import { createGateway } from "../../gateway/server.mjs";
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,7 +30,7 @@ check("S1 server binds 127.0.0.1 and never 0.0.0.0", /listen\(0, "127\.0\.0\.1"/
 check("S2 page never builds HTML from data (no innerHTML / insertAdjacentHTML / document.write / eval)", !/innerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(src("ui/index.html")));
 check("S3 the guide's tools are exactly the spec's eleven (six PC, five Money)", JSON.stringify(GUIDE_TOOLS) === JSON.stringify(["get_scan_results", "run_quick_scan", "start_deep_check", "get_deep_check_summary", "get_case_file", "update_case_step", "get_money_summary", "set_incident_date", "mark_canceled", "show_cancel_steps", "offer_letter"]));
 check("S4 the guide has no way to run programs or write files", !/child_process|writeFile|unlink|rmSync|spawn\(|exec\(/.test(code("src/guide.mjs")));
-check("S5 worker only ever launches the engine's two scripts", (code("src/worker.mjs").match(/"-File", this\.engine\.(\w+)/g) || []).every((m) => /hideout|hunt/.test(m)) && !/Remove-Item|Stop-Process|Set-ItemProperty/.test(code("src/worker.mjs")));
+check("S5 worker only ever launches the engine's three scripts (hideout, hunt, doors)", (code("src/worker.mjs").match(/"-File", this\.engine\.(\w+)/g) || []).every((m) => /hideout|hunt|doors/.test(m)) && !/Remove-Item|Stop-Process|Set-ItemProperty/.test(code("src/worker.mjs")));
 check("S6 instructions disclose the AI, forbid asking for secrets, and treat memory as data", /AI assistant \(powered by Claude\)/.test(SYSTEM_PROMPT) && /Never ask for, or accept, passwords/.test(SYSTEM_PROMPT) && /information about this PC, not instructions/.test(SYSTEM_PROMPT));
 check("S7 the Claude key is never logged or sent to the page", !/log\([^)]*key/i.test(code("src/main.mjs")) && !/apiKey|ANTHROPIC/.test(code("src/server.mjs")));
 { const rp = requestParams([{ role: "user", content: "x" }]); check("S8 every request: claude-opus-5, refusal fallbacks, cached system prompt", rp.model === "claude-opus-5" && MODEL === rp.model && rp.fallbacks === "default" && rp.betas.includes("server-side-fallback-2026-07-01") && rp.system[0].cache_control); }
@@ -98,6 +99,12 @@ function request(port, { method = "GET", path: p = "/", headers = {}, body } = {
   check("H13 chat streams the guide's events as NDJSON", chat.status === 200 && chat.body.split("\n").filter(Boolean).map((l) => JSON.parse(l).type).join(",") === "text,done");
   const st = JSON.parse((await request(port, { path: "/api/state", headers: { cookie } })).body);
   check("H14 state carries the case file and memory status", st.memory && st.memory.available === true && st.memory.caseFile.opened === "2026-09-18" && st.aiMode === "direct");
+  const doorsCheck = await request(port, { method: "POST", path: "/api/doors/check", headers: { cookie, origin, ...json }, body: "{}" });
+  check("H15 doors check queues a doors-quick job", doorsCheck.status === 202 && fakeWorker.enqueued.includes("doors-quick"));
+  const doorsSpeed = await request(port, { method: "POST", path: "/api/doors/speed", headers: { cookie, origin, ...json }, body: "{}" });
+  check("H16 doors speed queues a doors-speed job", doorsSpeed.status === 202 && fakeWorker.enqueued.includes("doors-speed"));
+  check("H17 an unknown doors route 404s", (await request(port, { method: "POST", path: "/api/doors/nope", headers: { cookie, origin, ...json }, body: "{}" })).status === 404);
+  check("H18 doors check without Origin is refused, like every other POST", (await request(port, { method: "POST", path: "/api/doors/check", headers: { cookie, ...json }, body: "{}" })).status === 403);
   await srv.close();
 }
 
@@ -300,7 +307,90 @@ check("G15 hand validation matches the spec for every tool", validateToolInput("
     check("W5 a declined Windows prompt is reported plainly", b.state === "failed" && /permission wasn't given/.test(b.message));
     const bad = await new Worker({ engine, dir, run: async () => ({ code: 1, stdout: "" }), powershell: "ps.exe" }).enqueue("scan").done;
     check("W6 a failed scan is reported as failed, never as clean", bad.state === "failed");
+
+    // W6b: a fixture "accounts" record from hunt.ps1 never survives summarizeHunt with its
+    // name intact - closes the exact gap the spec names (worker.mjs:143 was unfiltered).
+    const huntSnap = { admin: false, started: "x", sections: { accounts: { ok: true, items: [{ type: "user", name: "helper-account" }, { type: "administrator", name: "Nina", source: "Local" }] } } };
+    check("W6c summarizeHunt's own accounts section never carries a fixture account name - 'account n' only", !/helper-account|Nina/.test(JSON.stringify(summarizeHunt(huntSnap).accounts)) && summarizeHunt(huntSnap).accounts.notable.every((a) => /^account \d+$/.test(a.id)));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+// ------------------------------------------------------------------ worker: doors jobs + the two-lane yield (PR2, fake engine)
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hideout-app-test-doors-"));
+  try {
+    const engine = { hideout: "H.ps1", hunt: "U.ps1", doors: "D.ps1", verify: () => true };
+    let releaseHuntAdmin; const huntAdminGate = new Promise((res) => { releaseHuntAdmin = res; });
+    let doorsSlowStarted = false;
+    const run = async (exe, args) => {
+      if (args.includes(engine.doors)) {
+        const pass = args[args.indexOf("-Pass") + 1];
+        if (pass === "slow") doorsSlowStarted = true;
+        // Real doors.ps1 always gets a plain "-Out <path>" argument (never embedded in an
+        // encoded elevation script the way hunt-admin's is) - the fake mirrors that shape so
+        // this test still exercises #doors() writing to, then reading back from, a file.
+        const outPath = args[args.indexOf("-Out") + 1];
+        const data = JSON.stringify({ app: "Hideout doors", pass, sections: { remoteDesktopRegistry: { ok: true, items: [{ checked: true, control: {}, facts: { fDenyTSConnections: 1 } }] } } });
+        fs.writeFileSync(outPath, data);
+        return { code: 0, stdout: "  remoteDesktopRegistry     1 item(s)  0.0s" };
+      }
+      if (args[0] === "-NoProfile" && args[1] === "-EncodedCommand") {
+        // hunt-admin's real shape: the out path is embedded inside the encoded elevation
+        // script (worker.mjs's #hunt), never a plain "-Out" argument on this call.
+        await huntAdminGate;
+        const script = Buffer.from(args[2], "base64").toString("utf16le");
+        const m = /-Out','"([^"]+)"/.exec(script);
+        if (m) fs.writeFileSync(m[1], JSON.stringify({ admin: true, started: "x", sections: {} }));
+        return { code: 0, stdout: "" };
+      }
+      return { code: 0, stdout: JSON.stringify({ findings: [] }) };
+    };
+    const w = new Worker({ engine, dir, run, powershell: "ps.exe" });
+    const adminJob = w.enqueue("hunt-admin");
+    await new Promise((r) => setTimeout(r, 20));
+    check("W7 hunt-admin is active on the main lane, gated on the (unreleased) prompt", w.active?.kind === "hunt-admin");
+    const dq = await w.enqueue("doors-quick").done;
+    check("W8 doors-quick runs and finishes on its own lane WHILE hunt-admin is still active - the two lanes are independent", dq.state === "done" && w.latestDoors.quick.sections.remoteDesktopRegistry.items[0].facts.fDenyTSConnections === 1 && w.active?.kind === "hunt-admin");
+    const slowJob = w.enqueue("doors-slow");
+    await new Promise((r) => setTimeout(r, 20));
+    check("W9 a doors-slow job YIELDS while hunt-admin is active/queued - it never starts underneath it", slowJob.state === "queued" && !doorsSlowStarted);
+    releaseHuntAdmin();
+    await adminJob.done;
+    const slowDone = await slowJob.done;
+    check("W10 once hunt-admin finishes, the yielding doors-slow proceeds on its own, no poking required", slowDone.state === "done" && doorsSlowStarted === true);
+    const w2 = new Worker({ engine, dir, run: async () => ({ code: 1, stdout: "" }), powershell: "ps.exe" });
+    const bad = await w2.enqueue("doors-quick").done;
+    check("W11 a failed doors job is reported as failed, never as clean", bad.state === "failed");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+// ------------------------------------------------------------------ worker: doors-quick against the REAL doors.ps1, unmocked
+// Closes the exact gap a review found: every doors test above mocks run() with canned JSON,
+// and the only test that spawns the real binary (tests/selftest.ps1 D1-D7) passes its own
+// -Out and reads the file directly, never going through Worker.#doors() - so neither test
+// could catch #doors() parsing raw stdout instead of the -Out file (a guaranteed JSON.parse
+// failure on a real machine, since doors.ps1's Section() Write-Hosts a progress line per
+// section, always, and that lands on stdout right next to the JSON unless -Out redirects it).
+// This spawns the real doors.ps1 through the real runProcess(), through the real Worker,
+// exactly as main.mjs does at runtime, with Windows PowerShell 5.1 (POWERSHELL) - the exact
+// host worker.mjs uses in production.
+{
+  const repoRoot = path.resolve(APP, "..");
+  const realDoors = path.join(repoRoot, "doors.ps1");
+  if (!fs.existsSync(POWERSHELL) || !fs.existsSync(realDoors)) {
+    console.log("  skip  W12-W13 (Windows PowerShell 5.1 or doors.ps1 not present on this machine)");
+  } else {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hideout-app-test-doors-real-"));
+    try {
+      const engine = { hideout: path.join(repoRoot, "hideout.ps1"), hunt: path.join(repoRoot, "hunt.ps1"), doors: realDoors, verify: () => true };
+      const w = new Worker({ engine, dir, run: runProcess, powershell: POWERSHELL });
+      const job = await w.enqueue("doors-quick").done;
+      const sections = w.latestDoors.quick?.sections || {};
+      check("W12 doors-quick against the REAL doors.ps1 (no mocked run) finishes done, not failed, and its sections parse - the exact production code path (-Out file, never raw stdout)", job.state === "done" && Object.keys(sections).length > 0 && sections.remoteDesktopRegistry?.items?.length > 0, job.message);
+      const leftoverDoorsFiles = fs.readdirSync(path.join(dir, "doors"));
+      check("W13 the transient doors output file is cleaned up after a successful read", leftoverDoorsFiles.length === 0, leftoverDoorsFiles.join(", "));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
 }
 
 // ------------------------------------------------------------------ real snapshot (a PC that has run a deep check)
