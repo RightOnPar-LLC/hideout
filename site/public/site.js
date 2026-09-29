@@ -22,7 +22,7 @@
     });
   });
   // Nav links to a section inside a tab open that tab first.
-  var map = { "#pc": "t-pc", "#money": "t-money", "#guide": "t-guide" };
+  var map = { "#pc": "t-pc", "#money": "t-money", "#doors": "t-doors", "#guide": "t-guide" };
   function fromHash() { var id = map[location.hash]; if (id) select(document.getElementById(id), false); }
   window.addEventListener("hashchange", fromHash);
   fromHash();

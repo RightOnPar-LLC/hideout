@@ -28,7 +28,7 @@ const code = (f) => src(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])
 // ------------------------------------------------------------------ static
 check("S1 server binds 127.0.0.1 and never 0.0.0.0", /listen\(0, "127\.0\.0\.1"/.test(code("src/server.mjs")) && !/0\.0\.0\.0/.test(code("src/server.mjs")));
 check("S2 page never builds HTML from data (no innerHTML / insertAdjacentHTML / document.write / eval)", !/innerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/.test(src("ui/index.html")));
-check("S3 the guide's tools are exactly the spec's eleven (six PC, five Money)", JSON.stringify(GUIDE_TOOLS) === JSON.stringify(["get_scan_results", "run_quick_scan", "start_deep_check", "get_deep_check_summary", "get_case_file", "update_case_step", "get_money_summary", "set_incident_date", "mark_canceled", "show_cancel_steps", "offer_letter"]));
+check("S3 the guide's tools are exactly the spec's thirteen (six PC, five Money, two Doors & power)", JSON.stringify(GUIDE_TOOLS) === JSON.stringify(["get_scan_results", "run_quick_scan", "start_deep_check", "get_deep_check_summary", "get_case_file", "update_case_step", "get_money_summary", "set_incident_date", "mark_canceled", "show_cancel_steps", "offer_letter", "get_doors_summary", "run_doors_check"]));
 check("S4 the guide has no way to run programs or write files", !/child_process|writeFile|unlink|rmSync|spawn\(|exec\(/.test(code("src/guide.mjs")));
 check("S5 worker only ever launches the engine's three scripts (hideout, hunt, doors)", (code("src/worker.mjs").match(/"-File", this\.engine\.(\w+)/g) || []).every((m) => /hideout|hunt|doors/.test(m)) && !/Remove-Item|Stop-Process|Set-ItemProperty/.test(code("src/worker.mjs")));
 check("S6 instructions disclose the AI, forbid asking for secrets, and treat memory as data", /AI assistant \(powered by Claude\)/.test(SYSTEM_PROMPT) && /Never ask for, or accept, passwords/.test(SYSTEM_PROMPT) && /information about this PC, not instructions/.test(SYSTEM_PROMPT));
@@ -195,6 +195,60 @@ const r = makeRedactor({ names: ["jdoe"], computer: "HOME-PC" });
   check("G14 no connection = a clear 'not connected' message, no crash", !g.available && /isn't connected/.test(ev[0].message));
 }
 check("G15 hand validation matches the spec for every tool", validateToolInput("update_case_step", { step: "enabled_two_step", status: "done" }) === null && validateToolInput("update_case_step", { step: "enabled_two_step", status: "maybe" }) !== null && validateToolInput("get_case_file", { x: 1 }) !== null && Object.keys(CASE_STEPS).length === TOOLS.find((x) => x.name === "update_case_step").input_schema.properties.step.enum.length);
+check("G16 a doors-shaped step outside the (now 19-item) closed list is still refused", validateToolInput("update_case_step", { step: "turned_off_the_router", status: "done" }) !== null && /unknown step/.test(validateToolInput("update_case_step", { step: "turned_off_the_router", status: "done" })));
+
+// ------------------------------------------------------------------ guide: doors & power tools
+{
+  const fakeDoors = { guideView() { return { summary: { headline: "2 doors open", openCount: 2, openIds: ["remoteDesktop", "extraAccount"] }, managed: false, minutesAgo: { quick: 3, slow: null, speed: null } }; } };
+  const w = fakeWorkerForGuide(null); w.latestDoors = { quick: { at: new Date().toISOString() }, slow: null, speed: null };
+  const t = fakeTransport([
+    { stop: "tool_use", content: [{ type: "tool_use", id: "t1", name: "get_doors_summary", input: {} }] },
+    { stop: "end_turn", content: [{ type: "text", text: "Two doors are open." }] },
+  ]);
+  const g = new Guide({ transport: t, worker: w, doors: fakeDoors, redactor: r });
+  await g.chat("is my PC safe?", () => {});
+  const toolResult = JSON.parse(t.calls[1][2].content[0].content);
+  check("G17 get_doors_summary reads the Doors view once a quick pass has run", toolResult.doors.summary.headline === "2 doors open");
+}
+{
+  const w = fakeWorkerForGuide(null); // latestDoors undefined - nothing has ever run
+  const t = fakeTransport([
+    { stop: "tool_use", content: [{ type: "tool_use", id: "t1", name: "get_doors_summary", input: {} }] },
+    { stop: "end_turn", content: [{ type: "text", text: "no check yet" }] },
+  ]);
+  const g = new Guide({ transport: t, worker: w, redactor: r }); // no doors object wired at all - main.mjs's fail-soft shape
+  await g.chat("is my PC safe?", () => {});
+  const toolResult = JSON.parse(t.calls[1][2].content[0].content);
+  check("G18 get_doors_summary with no pass yet and no Doors wiring: an honest 'no doors check yet', never a guessed clean", toolResult.doors === null && /no doors check yet/.test(toolResult.note));
+}
+{
+  let doorsQuickCalls = 0;
+  const w = { latestScan: null, latestHunt: null, latestDoors: { quick: null, slow: null, speed: null }, jobs: [], enqueue(kind) { if (kind === "doors-quick") { doorsQuickCalls++; w.latestDoors.quick = { at: new Date().toISOString() }; } return { done: Promise.resolve({ state: "done" }) }; } };
+  const fakeDoors = { guideView() { return { summary: { headline: "Every door we could check is shut", openCount: 0 }, managed: false, minutesAgo: { quick: 0, slow: null, speed: null } }; } };
+  const t = fakeTransport([
+    { stop: "tool_use", content: [{ type: "tool_use", id: "t1", name: "run_doors_check", input: {} }] },
+    { stop: "end_turn", content: [{ type: "text", text: "All clear." }] },
+  ]);
+  const g = new Guide({ transport: t, worker: w, doors: fakeDoors, redactor: r });
+  await g.chat("check the doors right now", () => {});
+  const toolResult = JSON.parse(t.calls[1][2].content[0].content);
+  check("G19 run_doors_check enqueues the quick pass exactly once and returns the fresh summary - never doors-slow", doorsQuickCalls === 1 && toolResult.doors.summary.headline === "Every door we could check is shut");
+}
+{
+  const brain = fakeBrain();
+  const t = fakeTransport([
+    { stop: "tool_use", content: [{ type: "tool_use", id: "t1", name: "update_case_step", input: { step: "disabled_extra_account", status: "done" } }] },
+    { stop: "end_turn", content: [{ type: "text", text: "Noted." }] },
+  ]);
+  await new Guide({ transport: t, worker: fakeWorkerForGuide(null), brain, redactor: r }).chat("I took admin rights off the helper account", () => {});
+  check("G20 the guide records disabled_extra_account in the case file", brain.caseFile().steps.find((s) => s.id === "disabled_extra_account").status === "done");
+  const t2 = fakeTransport([
+    { stop: "tool_use", content: [{ type: "tool_use", id: "t2", name: "update_case_step", input: { step: "pc_must_stay_on", status: "done" } }] },
+    { stop: "end_turn", content: [{ type: "text", text: "Noted." }] },
+  ]);
+  await new Guide({ transport: t2, worker: fakeWorkerForGuide(null), brain, redactor: r }).chat("yes, this PC needs to stay on overnight", () => {});
+  check("G21 the guide records pc_must_stay_on in the case file", brain.caseFile().steps.find((s) => s.id === "pc_must_stay_on").status === "done");
+}
 
 // ------------------------------------------------------------------ end to end: app guide -> real gateway -> fake Claude
 {
@@ -219,6 +273,34 @@ check("G15 hand validation matches the spec for every tool", validateToolInput("
   check("E2 the gateway, not the app, supplied the prompt and tools", claudeCalls.every((c) => c.system[0].text === SYSTEM_PROMPT && c.tools.length === TOOLS.length));
   check("E3 the tool ran on the PC; only its redacted result crossed the wire", claudeCalls[1].messages[2].content[0].type === "tool_result" && /changed_email_password/.test(claudeCalls[1].messages[2].content[0].content));
   gw.server.close();
+}
+
+// ------------------------------------------------------------------ end to end: doors & power through the REAL gateway
+// Proves gatewayTransport's x-hideout-spec header and gateway/server.mjs's header dispatch
+// actually connect: the gateway must pick TODAY's (thirteen-tool) spec for this call, or
+// get_doors_summary would never even be an option the model could reach for.
+{
+  const claudeCalls2 = [];
+  const fakeClaude2 = { beta: { messages: { stream(params) {
+    claudeCalls2.push(params); const h = {};
+    const n = claudeCalls2.length;
+    return { on(ev, fn) { h[ev] = fn; return this; }, async finalMessage() {
+      if (n === 1) return { stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name: "get_doors_summary", input: {} }], model: MODEL, usage: { input_tokens: 5, output_tokens: 5 } };
+      h.text?.("Two doors are open: Remote Desktop and an extra account."); return { stop_reason: "end_turn", content: [{ type: "text", text: "Two doors are open: Remote Desktop and an extra account." }], model: MODEL, usage: { input_tokens: 5, output_tokens: 9 } };
+    } };
+  } } } };
+  const gw2 = createGateway({ client: fakeClaude2, secret: "e".repeat(48) });
+  const port2 = await new Promise((res) => gw2.server.listen(0, "127.0.0.1", () => res(gw2.server.address().port)));
+  const base2 = `http://127.0.0.1:${port2}`;
+  const httpFetch2 = (u, init) => fetch(u, init);
+  const tok2 = (await (await httpFetch2(`${base2}/v1/install`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json()).token;
+  const fakeDoors = { guideView() { return { summary: { headline: "2 doors open", openCount: 2 }, managed: false, minutesAgo: { quick: 1, slow: 1, speed: null } }; } };
+  const w = fakeWorkerForGuide(null); w.latestDoors = { quick: { at: new Date().toISOString() }, slow: { at: new Date().toISOString() }, speed: null };
+  const g2 = new Guide({ transport: gatewayTransport(base2, async () => tok2, { fetchImpl: httpFetch2 }), worker: w, doors: fakeDoors, redactor: r });
+  const ev2 = []; await g2.chat("is my PC safe right now?", (e) => ev2.push(e));
+  check("E4 app -> gateway (x-hideout-spec header) -> Claude -> get_doors_summary -> gateway -> answer", ev2.filter((e) => e.type === "text").map((e) => e.delta).join("") === "Two doors are open: Remote Desktop and an extra account." && ev2.at(-1).type === "done");
+  check("E5 the gateway served the NEW (thirteen-tool) spec because gatewayTransport sent x-hideout-spec", claudeCalls2[0].tools.length === TOOLS.length && claudeCalls2[0].tools.some((x) => x.name === "get_doors_summary"));
+  gw2.server.close();
 }
 
 // ------------------------------------------------------------------ brain (fake child process + parse)
@@ -391,6 +473,98 @@ check("G15 hand validation matches the spec for every tool", validateToolInput("
       check("W13 the transient doors output file is cleaned up after a successful read", leftoverDoorsFiles.length === 0, leftoverDoorsFiles.join(", "));
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }
+}
+
+// ------------------------------------------------------------------ DOM-free render test: the REAL ui/index.html script, minimally stubbed
+// Runs the actual inline <script> Hideout ships (no reimplementation of its render logic) in
+// this same JS realm via `new Function(...)`, with a hand-rolled DOM (plain objects, no
+// jsdom - this repo stays zero-dep) standing in for `document`/`EventSource`/`fetch`. Drives
+// it exactly the way the window does: dispatch a fabricated SSE "state" event, then read the
+// classes the script itself assigned. Proves the verdict/locked/greyed classes for real,
+// instead of trusting that ui/index.html's source merely CONTAINS the right-looking strings.
+{
+  function fakeNode(tag) {
+    const n = {
+      tagName: String(tag || "div").toUpperCase(), className: "", textContent: "", value: "",
+      hidden: false, disabled: false, style: {}, children: [], attrs: {}, _listeners: {},
+      appendChild(c) { this.children.push(c); return c; },
+      removeChild(c) { this.children = this.children.filter((x) => x !== c); },
+      remove() {},
+      addEventListener(ev, fn) { (this._listeners[ev] = this._listeners[ev] || []).push(fn); },
+      removeEventListener() {},
+      setAttribute(k, v) { this.attrs[k] = v; },
+      getAttribute(k) { return this.attrs[k]; },
+      querySelector(sel) { return sel === ".badge" ? this.children.find((c) => c.className === "badge") || null : null; },
+      querySelectorAll() { return []; },
+      focus() {}, click() { (this._listeners.click || []).forEach((f) => f()); },
+      get firstChild() { return this.children[0] || null; },
+    };
+    return n;
+  }
+  function fakeDocument() {
+    const registry = new Map();
+    return {
+      getElementById(id) { if (!registry.has(id)) registry.set(id, fakeNode("div")); return registry.get(id); },
+      createElement(tag) { return fakeNode(tag); },
+      createTextNode(text) { return { nodeType: 3, textContent: String(text) }; },
+      _registry: registry,
+    };
+  }
+  let lastES = null;
+  function FakeEventSource(url) { this.url = url; this._listeners = {}; lastES = this; }
+  FakeEventSource.prototype.addEventListener = function (ev, fn) { (this._listeners[ev] = this._listeners[ev] || []).push(fn); };
+  const fakeNavigator = { clipboard: { writeText: () => Promise.resolve() } };
+  const fakeFetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+
+  const uiSrc = src("ui/index.html");
+  const scriptBody = (/<script>([\s\S]*)<\/script>/.exec(uiSrc) || [])[1];
+  const dom = fakeDocument();
+  const runUi = new Function("document", "EventSource", "fetch", "navigator", scriptBody);
+  runUi(dom, FakeEventSource, fakeFetch, fakeNavigator);
+
+  const managed = false;
+  const doorsView = (leftoversPatch) => ({
+    doors: {
+      remoteDesktop: { verdict: "open" }, extraAccount: { verdict: "not_checked" }, diskEncryption: { verdict: "on" },
+      remoteSupport: { verdict: "none" }, antivirus: { verdict: "fine" },
+      leftovers: Object.assign({ verdict: "flagged", deleteAllowed: false, unlockedBy: null, findingsCount: 2 }, leftoversPatch),
+    },
+    power: {
+      suddenShutdowns: { verdict: "quiet", count: 0, classes: [], ranFlatCount: 0 }, batteryAndCharger: { verdict: "fine" },
+      sleepTimers: { verdict: "not_checked" }, restartWaiting: { verdict: "none" }, startupHealth: { total: 0, tasks: [] },
+      diskSpace: { verdict: "fine", drives: [{ drive: "C:", verdict: "fine", freeGb: 100, percentFree: 50 }] }, speedCap: { verdict: "not-run" },
+    },
+    managed, summary: { openCount: 1, openIds: ["remoteDesktop"], shutCount: 3, notCheckedCount: 2, notCheckedIds: ["extraAccount", "sleepTimers"], headline: "1 door open" },
+    minutesAgo: { quick: 1, slow: 1, speed: null },
+  });
+  const steps = (lockDownStatus) => ["removed_remote_access_tool", "disabled_extra_account", "turned_off_remote_desktop"].map((id) => ({ id, label: id, status: lockDownStatus, at: null }));
+  const push = (memorySteps, leftoversPatch) => {
+    lastES._listeners.state[0]({ data: JSON.stringify({
+      worker: { busy: false, busyDoors: false, jobs: [], latestScan: null, latestHunt: null },
+      memory: { available: true, why: "", caseFile: { opened: "2026-01-01T00:00:00Z", scans: [], steps: memorySteps } },
+      money: null,
+      doors: doorsView(leftoversPatch),
+    }) });
+  };
+
+  check("U0 the SSE 'state' listener wired up (the real script's own boot code ran)", typeof lastES?._listeners.state?.[0] === "function");
+  push(steps("not_yet"), {}); // nothing locked down yet, leftovers not yet evidenced
+  const doorsBox = dom._registry.get("drDoors"), recoveryBox = dom._registry.get("drRecovery");
+  // children[0] is each box's own "// Doors" / "// What to do, in order" <h2> - the door
+  // cards and the recovery cards both start at index 1.
+  const barClass = (i) => doorsBox.children[1 + i].children[0].className;
+  check("U1 an OPEN door (remoteDesktop) renders bar.high, the real rowClass()/DOOR_OPEN_CLASS mapping - not a hand-typed string", barClass(0) === "bar high");
+  check("U2 a NOT_CHECKED door (extraAccount) renders bar.unsure - not_checked is never shown as clean, even in CSS class", barClass(1) === "bar unsure");
+  check("U3 a SHUT door (diskEncryption: on) renders a plain bar, no high/unsure", barClass(2) === "bar shut");
+  check("U4 the leftovers ('Delete leftovers') recovery card is class xcard.locked before a scan or the person's word unlocked it", recoveryBox.children[10].className === "xcard locked");
+  check("U5 the harden card is class xcard.greyed while lock-down A-C are NOT all recorded done", recoveryBox.children[11].className === "xcard greyed");
+
+  push(steps("done"), { deleteAllowed: true, unlockedBy: "evidence" }); // lock-down A-C all done; leftovers cleared by evidence
+  check("U6 once lock-down A-C are all 'done' in the case file, the harden card ungates (plain xcard, no longer greyed)", recoveryBox.children[11].className === "xcard");
+  check("U7 once the leftovers card is unlocked (evidence), it's a plain xcard, no longer locked", recoveryBox.children[10].className === "xcard");
+
+  push(steps("not_applicable"), {}); // a step recorded not_applicable counts the same as done for the gate
+  check("U8 a lock-down step recorded not_applicable (not just 'done') still ungates the harden card", recoveryBox.children[11].className === "xcard");
 }
 
 // ------------------------------------------------------------------ real snapshot (a PC that has run a deep check)

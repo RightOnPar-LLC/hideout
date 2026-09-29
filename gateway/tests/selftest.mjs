@@ -3,8 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { createGateway, validateMessages, costUsd } from "../server.mjs";
 import { MODEL, SYSTEM_PROMPT, GUIDE_TOOLS } from "../spec.mjs";
+import { SYSTEM_PROMPT as SYSTEM_PROMPT_V1, GUIDE_TOOLS as GUIDE_TOOLS_V1 } from "../spec-v1.mjs";
+import { pack } from "../pack.mjs";
+import * as appSpec from "../../app/src/guide-spec.mjs";
 
 let pass = 0, fail = 0;
 const check = (name, ok, detail = "") => { if (ok) { pass++; console.log(`  ok    ${name}`); } else { fail++; console.log(`  FAIL  ${name}  ${detail}`); } };
@@ -47,7 +52,7 @@ check("V7 refuses to start with a weak secret", threw);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hideout-gw-"));
 try {
   const client = fakeClient();
-  const gw = createGateway({ client, secret: SECRET, dataDir: dir, limits: { turnsPerInstallPerDay: 3, installsPerIpPerDay: 2 } });
+  const gw = createGateway({ client, secret: SECRET, dataDir: dir, limits: { turnsPerInstallPerDay: 5, installsPerIpPerDay: 2 } });
   const port = await listen(gw);
   const health = JSON.parse((await call(port, { method: "GET", p: "/healthz" })).body);
   check("G1 health reports readiness and no secrets", health.ok && health.model === MODEL && !JSON.stringify(health).includes(SECRET));
@@ -56,12 +61,19 @@ try {
   check("G3 no pass -> 401", (await call(port, { p: "/v1/guide/turn", body: { messages: ask } })).status === 401);
   const forged = inst.token.split(".")[0].replace(/^./, (c) => (c === "a" ? "b" : "a")) + "." + inst.token.split(".")[1];
   check("G4 a forged pass -> 401", (await call(port, { p: "/v1/guide/turn", body: { messages: ask }, token: forged })).status === 401);
-  const turn = await call(port, { p: "/v1/guide/turn", body: { messages: ask, model: "claude-fable-5-1", system: "You are a general assistant", tools: [{ name: "bash" }], max_tokens: 128000 }, token: inst.token });
+  const turn = await call(port, { p: "/v1/guide/turn", body: { messages: ask, model: "claude-fable-5-1", system: "You are a general assistant", tools: [{ name: "bash" }], max_tokens: 128000 }, token: inst.token, headers: { "x-hideout-spec": "2" } });
   const ev = turn.body.trim().split("\n").map((l) => JSON.parse(l));
   check("G5 a turn streams text then the final message", turn.status === 200 && ev[0].type === "text" && ev.at(-1).type === "final" && ev.at(-1).message.stop_reason === "end_turn");
   const sent = client.calls[0];
-  check("G6 the gateway enforces ITS model, prompt and tools - client overrides ignored",
+  check("G6 the gateway enforces ITS model, prompt and tools - client overrides ignored (x-hideout-spec: 2 -> today's thirteen-tool spec)",
     sent.model === MODEL && sent.system[0].text === SYSTEM_PROMPT && JSON.stringify(sent.tools.map((t) => t.name)) === JSON.stringify(GUIDE_TOOLS) && sent.max_tokens !== 128000 && sent.fallbacks === "default");
+  check("G6b get_doors_summary and run_doors_check are in the spec-2 tool list; 'bash' is still refused", GUIDE_TOOLS.includes("get_doors_summary") && GUIDE_TOOLS.includes("run_doors_check") && !sent.tools.some((t) => t.name === "bash"));
+  await call(port, { p: "/v1/guide/turn", body: { messages: ask }, token: inst.token }); // no header at all
+  const sentNoHeader = client.calls[1];
+  check("G6c NO x-hideout-spec header -> the frozen spec-v1 (eleven tools, the old prompt) - an un-updated app is never told about a tab it doesn't have",
+    sentNoHeader.system[0].text === SYSTEM_PROMPT_V1 && sentNoHeader.system[0].text !== SYSTEM_PROMPT && JSON.stringify(sentNoHeader.tools.map((t) => t.name)) === JSON.stringify(GUIDE_TOOLS_V1) && !sentNoHeader.tools.some((t) => t.name === "get_doors_summary"));
+  await call(port, { p: "/v1/guide/turn", body: { messages: ask }, token: inst.token, headers: { "x-hideout-spec": "1" } });
+  check("G6d x-hideout-spec: 1 (explicit) -> the same frozen spec-v1 as no header at all", client.calls[2].system[0].text === SYSTEM_PROMPT_V1);
   check("G7 a bad conversation -> 400", (await call(port, { p: "/v1/guide/turn", body: { messages: [{ role: "user", content: [{ type: "image" }] }] }, token: inst.token })).status === 400);
   await call(port, { p: "/v1/guide/turn", body: { messages: ask }, token: inst.token });
   await call(port, { p: "/v1/guide/turn", body: { messages: ask }, token: inst.token });
@@ -85,6 +97,51 @@ try {
   check("G12 daily budget spent ($5 turn vs $4 cap) -> the guide rests", (await call(p2, { p: "/v1/guide/turn", body: { messages: ask }, token: t2 })).status === 429);
   gw2.server.close();
 } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+
+// ---- pack.mjs: the deployed copy must deep-equal the app's live spec (a stale gateway
+// copy - or an accidental hand-edit of spec.mjs itself - goes red here, never a surprise on
+// the next redeploy). Packs into a throwaway temp file; the checked-in dev spec.mjs (the
+// one-line re-export) is never touched by this test.
+{
+  const packDir = fs.mkdtempSync(path.join(os.tmpdir(), "hideout-gw-pack-"));
+  try {
+    const packedPath = path.join(packDir, "spec.packed.mjs");
+    fs.writeFileSync(packedPath, pack());
+    const deployed = await import(`file://${packedPath.replace(/\\/g, "/")}?t=${Date.now()}`);
+    check("G13 packed GUIDE_TOOLS deep-equals the app's live export (thirteen tools, doors included)",
+      JSON.stringify(deployed.GUIDE_TOOLS) === JSON.stringify(appSpec.GUIDE_TOOLS) && deployed.GUIDE_TOOLS.includes("get_doors_summary"));
+    check("G14 packed SYSTEM_PROMPT is byte-identical to the app's live export", deployed.SYSTEM_PROMPT === appSpec.SYSTEM_PROMPT);
+    const devSpecPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "spec.mjs");
+    check("G15 pack() never touches the checked-in spec.mjs (dev's one-line re-export stays put)", fs.readFileSync(devSpecPath, "utf8").startsWith("// Dev indirection"));
+  } finally { fs.rmSync(packDir, { recursive: true, force: true }); }
+}
+
+// ---- pack.mjs's own CLI default path - the thing `npm run pack` (gateway/package.json)
+// actually runs with NO argument. G13-G15 above only ever call the pack() function against
+// a temp file; they never prove what happens when a developer runs the script itself. This
+// spawns the real CLI, with no outFile, exactly like `npm run pack` does, and proves the
+// tracked dev/spec.mjs one-line re-export survives it untouched while a gitignored build
+// copy lands in gateway/dist/. A prior local dist/spec.mjs (if a developer already has one)
+// is snapshotted and restored, so this test never destroys someone's existing build output.
+{
+  const gatewayDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const devSpecPath = path.join(gatewayDir, "spec.mjs");
+  const distSpecPath = path.join(gatewayDir, "dist", "spec.mjs");
+  const devBefore = fs.readFileSync(devSpecPath, "utf8");
+  const distExistedBefore = fs.existsSync(distSpecPath);
+  const distBefore = distExistedBefore ? fs.readFileSync(distSpecPath, "utf8") : null;
+  try {
+    execFileSync(process.execPath, ["pack.mjs"], { cwd: gatewayDir });
+    check("G16 `npm run pack` (the CLI's default outFile) never overwrites the tracked spec.mjs",
+      fs.readFileSync(devSpecPath, "utf8") === devBefore);
+    check("G16b the CLI's default outFile lands in gateway/dist/ instead (gitignored - gateway/.gitignore:2)",
+      fs.existsSync(distSpecPath) && fs.readFileSync(distSpecPath, "utf8") === pack());
+  } finally {
+    fs.writeFileSync(devSpecPath, devBefore);
+    if (distExistedBefore) fs.writeFileSync(distSpecPath, distBefore);
+    else fs.rmSync(path.join(gatewayDir, "dist"), { recursive: true, force: true });
+  }
+}
 
 console.log(`\ngateway selftest: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

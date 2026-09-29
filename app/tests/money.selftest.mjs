@@ -315,6 +315,12 @@ function request(port, { method = "GET", path: p = "/", headers = {}, body } = {
   check("F4c negative control: a fixture string carrying none of them stays clean", identityHits("totally normal text with no identifiers at all", me).length === 0);
   check("F5 the guide is told it never logs in, cancels or sends", /never logs into accounts, cancels anything, or sends email/.test(src("src/guide-spec.mjs")));
   check("F6 letters never state facts the person did not give: unconfirmed lines go in [Confirm: ...] brackets", /Never state a fact the person hasn't told you and Hideout doesn't show/.test(src("src/guide-spec.mjs")) && src("src/guide-spec.mjs").includes("[Confirm: "));
+// F7-F10: the doors fold's own safety pins (money.selftest.mjs's F5/F6 pattern - a regex on
+// guide-spec.mjs's raw source, so a later edit that quietly drops the wording goes red here).
+check("F7 doors: not checked is never shown as clean", /not checked is not the same as off/i.test(src("src/guide-spec.mjs")));
+check("F8 doors: the recovery key is never asked for or stored", /never store the recovery key/i.test(src("src/guide-spec.mjs")));
+check("F9 doors: the guide says which of the two things unlocked the delete card", /say which of the two things unlocked it/i.test(src("src/guide-spec.mjs")));
+check("F10 the change-every-password rule (line 45) stays unconditional - the doors fold never makes it conditional on whether the person installed the remote tool themselves", /stays unconditional either way/.test(src("src/guide-spec.mjs")) && /Passwords: change them from a DIFFERENT device/.test(src("src/guide-spec.mjs")) && !/only if they say they did not install/i.test(src("src/guide-spec.mjs")));
 }
 
 // ------------------------------------------------------------------ E2E: Money tools through the real gateway

@@ -11,7 +11,7 @@
 // brain, and put cancel steps and drafted letters in front of the person as cards. None can
 // change the PC, log in anywhere, or send anything. Everything the model sees is redacted.
 import Anthropic from "@anthropic-ai/sdk";
-import { MODEL, GUIDE_TOOLS, CASE_STEPS, validateToolInput, requestParams } from "./guide-spec.mjs";
+import { MODEL, SPEC_VERSION, GUIDE_TOOLS, CASE_STEPS, validateToolInput, requestParams } from "./guide-spec.mjs";
 
 export { MODEL, GUIDE_TOOLS };
 const MAX_TOOL_ROUNDS = 6;
@@ -41,7 +41,10 @@ export function directTransport(apiKey, { fetchImpl } = {}) {
 }
 
 // Gateway protocol: POST {messages} -> NDJSON lines {type:"text",delta} ... {type:"final",message}
-// or {type:"error",status,message}. The gateway adds the prompt, tools and model itself.
+// or {type:"error",status,message}. The gateway adds the prompt, tools and model itself -
+// picked by THIS spec's own version (x-hideout-spec), so a gateway that has already been
+// redeployed for a newer app still serves an old, un-updated install exactly the tools and
+// the prompt its own window has (gateway/spec-v1.mjs's header comment has the full story).
 export function gatewayTransport(baseUrl, getToken, { fetchImpl } = {}) {
   const url = new URL("/v1/guide/turn", baseUrl);
   const doFetch = fetchImpl || lockedFetch([url.host]);
@@ -50,7 +53,7 @@ export function gatewayTransport(baseUrl, getToken, { fetchImpl } = {}) {
     async turn(messages, onText) {
       const res = await doFetch(url.href, {
         method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${await getToken()}` },
+        headers: { "content-type": "application/json", authorization: `Bearer ${await getToken()}`, "x-hideout-spec": String(SPEC_VERSION) },
         body: JSON.stringify({ messages }),
       });
       if (!res.ok || !res.body) throw Object.assign(new Error(`gateway ${res.status}`), { status: res.status });
@@ -76,8 +79,8 @@ export function gatewayTransport(baseUrl, getToken, { fetchImpl } = {}) {
 }
 
 export class Guide {
-  constructor({ transport, worker, brain = null, money = null, redactor, now = () => Date.now(), onUsage = null }) {
-    this.transport = transport; this.worker = worker; this.brain = brain; this.money = money; this.redact = redactor; this.now = now; this.onUsage = onUsage;
+  constructor({ transport, worker, brain = null, money = null, doors = null, redactor, now = () => Date.now(), onUsage = null }) {
+    this.transport = transport; this.worker = worker; this.brain = brain; this.money = money; this.doors = doors; this.redact = redactor; this.now = now; this.onUsage = onUsage;
     this.model = MODEL;
     this.messages = []; // append-only: assistant turns are stored exactly as returned
     this.busy = false;
@@ -153,6 +156,31 @@ export class Guide {
       if (!info) return { error: "That company isn't in the repeating charges - read get_money_summary for the ids." };
       emit({ type: "card", card: { type: "cancel", ...info } });
       return { shown: true, ...info };
+    }
+    // Doors & power: get_doors_summary mirrors get_scan_results exactly (a PURE read that
+    // only WAITS for a doors-quick already in flight - e.g. the one main.mjs enqueues on
+    // launch - never enqueues one itself); run_doors_check mirrors run_quick_scan (always
+    // enqueues the quick pass and awaits it). Neither ever touches doors-slow.
+    const doorsView = () => {
+      if (!this.doors) return { doors: null, note: "no doors check yet - run_doors_check, or press Check again in the Doors & power tab" };
+      if (!w.latestDoors?.quick && !w.latestDoors?.slow) return { doors: null, note: "no doors check yet - run_doors_check, or press Check again in the Doors & power tab" };
+      return { doors: this.doors.guideView() };
+    };
+    if (name === "get_doors_summary") {
+      const hasRun = !!(w.latestDoors && (w.latestDoors.quick || w.latestDoors.slow));
+      const running = !hasRun && (w.jobs || []).find((j) => j.kind === "doors-quick" && (j.state === "queued" || j.state === "running"));
+      if (running) {
+        emit({ type: "tool", name, status: "Waiting for the doors & power check that's running..." });
+        await Promise.race([running.done, new Promise((r) => setTimeout(r, 30_000))]);
+      }
+      return doorsView();
+    }
+    if (name === "run_doors_check") {
+      if (!this.doors) return { error: "Doors & power isn't available." };
+      emit({ type: "tool", name, status: "Checking doors & power (a few seconds)..." });
+      const job = await w.enqueue("doors-quick").done;
+      if (job.state !== "done") return { error: job.message || "the doors check did not finish" };
+      return doorsView();
     }
     if (name === "offer_letter") {
       const info = input.merchant && money ? money.cancelInfo(input.merchant) : null;

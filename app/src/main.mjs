@@ -63,7 +63,7 @@ const money = new Money({ brain, log });
 const doors = new Doors({ worker, brain, money, log });
 const guide = new Guide({
   transport: makeTransport(),
-  worker, brain, money,
+  worker, brain, money, doors,
   redactor: makeRedactor(collectIdentity()),
   onUsage: (u) => log(`guide usage model=${u.model} stop=${u.stop} in=${u.input_tokens} cache_read=${u.cache_read_input_tokens || 0} cache_write=${u.cache_creation_input_tokens || 0} out=${u.output_tokens}`),
 });
