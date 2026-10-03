@@ -49,7 +49,7 @@ items. Signed-binary sideloading like this is a common way infostealers are deli
 ## The desktop app (`app/`)
 
 Hideout as an app: a window with the PC's status on the left and the **Hideout Guide** on
-the right - an AI assistant (powered by Claude) that walks people through a malware or
+the right - an AI assistant (powered by workers) that walks people through a malware or
 scam scare in plain words, one step at a time.
 
 - **Worker** - runs the engine as background jobs (quick scan, deep check, deep check
@@ -107,3 +107,4 @@ real signed files (one with a single flipped byte, so its signature is a real
 `HashMismatch`), check the verdicts and the report's escaping, and prove the engine
 has no delete/move/run commands. Negative controls: removing tamper detection or
 HTML escaping turns the matching checks red.
+
