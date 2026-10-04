@@ -1,5 +1,8 @@
 # Hideout
 
+> **The hunter — finds where malware hides on a Windows PC; it only looks.**  
+> ![theme](https://img.shields.io/badge/dark%20red-B91C1C?style=flat-square)
+
 **https://hideout.meshtool.ai** — the website (source in `site/`: static files, no cookies, no tracking).
 
 Finds where malware hides on a Windows PC. **Double-click `Hideout.cmd`**: it scans,
