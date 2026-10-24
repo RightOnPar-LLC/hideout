@@ -1,0 +1,4 @@
+# Link the C runtime statically: one self-contained hideout.exe that runs on a fresh
+# Windows (and in Windows Sandbox) without the Visual C++ redistributable installed.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

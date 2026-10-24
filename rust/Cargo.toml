@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/hideout",
+  "crates/hideout-win",
+  "crates/hideout-scan",
+  "crates/hideout-redact",
+  "crates/hideout-money",
+  "crates/hideout-guide",
+  "crates/hideout-parity",
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# Every dependency is listed here with the reason it is allowed in. Adding one means
+# adding a reason, in the phase report and here.
+[workspace.dependencies]
+# Reports, the local API and the targets file are JSON. The de-facto standard; no
+# reasonable way to hand-roll it safely.
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+# The scan rules are regular expressions taken word for word from hideout.ps1 / hunt.ps1.
+# Re-implementing them by hand is how parity quietly breaks. Linear-time engine, no
+# catastrophic backtracking on names chosen by malware.
+regex = "1"
+# Microsoft's own Windows bindings. Only hideout-win may use them; it is the one crate
+# allowed to contain `unsafe`.
+windows = "0.62"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+# panic stays "unwind": one bad request or one unreadable item must not take the whole
+# app down with it. Request handlers and scan sections catch it and say so.

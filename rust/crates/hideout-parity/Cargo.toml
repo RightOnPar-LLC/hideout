@@ -1,0 +1,11 @@
+[package]
+name = "hideout-parity"
+description = "Dev tool: run the PowerShell engine and the Rust engine on the same PC and diff the reports field by field. Never shipped."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+hideout-win = { path = "../hideout-win" }
+serde_json.workspace = true
