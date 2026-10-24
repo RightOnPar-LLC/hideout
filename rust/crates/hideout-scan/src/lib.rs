@@ -6,6 +6,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod autostart;
+pub mod par;
+pub mod pe;
 pub mod quick;
 pub mod report;
 pub mod rules;
+pub mod sigcache;

@@ -40,7 +40,21 @@ const KNOWN: &[(&str, &str)] = &[
         "hidden-file-in-program-folder",
         "hideout.ps1 listed a program's folder without -Force, so hidden DLLs and hidden payloads beside a program were never checked. The Rust engine checks hidden files too.",
     ),
+    (
+        "wider-surface",
+        "hideout.ps1 read four places (tasks, five Run keys, two Startup folders, services). The Rust engine reads the whole start-up surface: every user's Run keys, Policies\\Run, RunServices, Winlogon, IFEO debuggers, SilentProcessExit, AppInit/AppCert DLLs, LSA packages, Active Setup, ServiceDlls, COM task handlers and user COM overrides, WMI consumers, drivers, every profile's Startup folder, browser policy-forced extensions. Items from those places exist only on the Rust side.",
+    ),
+    (
+        "new-check",
+        "A reason the Rust engine adds that hideout.ps1 did not have (see RUST_ONLY_TAGS), e.g. a 'media' file beside a program that is really a Windows program.",
+    ),
 ];
+
+/// Reason tags only the Rust engine produces.
+const RUST_ONLY_TAGS: &[&str] = &["Program dressed as media"];
+
+/// Finding kinds that only exist on the Rust side (not about a program's folder).
+const RUST_ONLY_KINDS: &[&str] = &["Browser extension (forced by policy)", "WMI event consumer (script)"];
 
 #[derive(Debug)]
 struct Diff {
@@ -212,7 +226,9 @@ fn compare_targets(ps: &[Value], rs: &[Value], wmi_no_path: &[String], diffs: &m
     for t in rs_left {
         let kind = s(t, "kind");
         let name = s(t, "name");
-        let explained = if kind == "Startup (registry)" && name.to_lowercase().starts_with("ps") {
+        let explained = if s(t, "scope") == "wider" {
+            Some("wider-surface")
+        } else if kind == "Startup (registry)" && name.to_lowercase().starts_with("ps") {
             Some("ps-prefixed-run-value")
         } else if kind == "Startup folder" && startup_dirs().iter().any(|d| is_hidden(&d.join(&name))) {
             Some("hidden-startup-file")
@@ -271,6 +287,36 @@ fn only_hidden_files_differ(ps: &Value, rs: &Value) -> bool {
         }
     }
     pr.keys().all(|k| rr.contains_key(k))
+}
+
+/// The weights hideout.ps1 gives each reason (a finding needs 2 or more).
+fn ps_weight(tag: &str) -> u32 {
+    match tag {
+        "Tampered file" => 5,
+        "Unsigned program" => 3,
+        "Unsigned DLLs" | "No matching install" => 2,
+        "Random folder" | "Hidden payload" => 1,
+        _ => 0,
+    }
+}
+
+/// The Rust finding equals PowerShell's once the reasons only Rust has are taken out
+/// (and if PowerShell had no finding, what is left would not have made one).
+fn only_new_checks_differ(ps: &Value, rs: &Value) -> bool {
+    let tags = |v: &Value| -> Vec<(String, String)> {
+        let mut x: Vec<(String, String)> = as_list(v.get("reasons").unwrap_or(&Value::Null)).iter().map(|r| (s(r, "tag"), s(r, "text"))).collect();
+        x.sort();
+        x
+    };
+    let rt = tags(rs);
+    if !rt.iter().any(|(t, _)| RUST_ONLY_TAGS.contains(&t.as_str())) {
+        return false;
+    }
+    let rest: Vec<(String, String)> = rt.into_iter().filter(|(t, _)| !RUST_ONLY_TAGS.contains(&t.as_str())).collect();
+    if ps.get("reasons").is_none() {
+        return rest.iter().map(|(t, _)| ps_weight(t)).sum::<u32>() < 2;
+    }
+    rest == tags(ps)
 }
 
 fn compare_quick(ps: &Value, rs: &Value, ex: &Explained, diffs: &mut Vec<Diff>) {
@@ -344,7 +390,13 @@ fn compare_quick(ps: &Value, rs: &Value, ex: &Explained, diffs: &mut Vec<Diff>) 
                     same = false;
                 }
                 if !same {
-                    let explained = only_hidden_files_differ(p, &r).then_some("hidden-file-in-program-folder");
+                    let explained = if only_hidden_files_differ(p, &r) {
+                        Some("hidden-file-in-program-folder")
+                    } else if only_new_checks_differ(p, &r) {
+                        Some("new-check")
+                    } else {
+                        None
+                    };
                     diffs.push(Diff { area: "findings".into(), key: k, ps: p.clone(), rust: r, explained });
                 }
             }
@@ -354,7 +406,10 @@ fn compare_quick(ps: &Value, rs: &Value, ex: &Explained, diffs: &mut Vec<Diff>) 
         let k = finding_key(&r);
         // A finding on a target only the Rust engine could see carries that target's reason.
         let from_target = ex.targets.iter().find(|(kind, name, _)| *kind == s(&r, "kind").to_lowercase() && *name == s(&r, "name").to_lowercase()).map(|t| t.2);
-        let explained = from_target.or_else(|| only_hidden_files_differ(&json!({}), &r).then_some("hidden-file-in-program-folder"));
+        let explained = from_target
+            .or_else(|| RUST_ONLY_KINDS.contains(&s(&r, "kind").as_str()).then_some("wider-surface"))
+            .or_else(|| only_hidden_files_differ(&json!({}), &r).then_some("hidden-file-in-program-folder"))
+            .or_else(|| only_new_checks_differ(&json!({}), &r).then_some("new-check"));
         diffs.push(Diff { area: "findings".into(), key: k, ps: json!("missing"), rust: r, explained });
     }
 }

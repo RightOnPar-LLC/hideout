@@ -56,13 +56,8 @@ pub type ScanFn = Arc<dyn Fn() -> Result<Value, String> + Send + Sync>;
 
 pub fn real_scan() -> ScanFn {
     Arc::new(|| {
-        let (targets, problems) = quick::gather_targets();
-        let mut report = serde_json::to_value(quick::scan(&targets, &quick::Installed::read())).map_err(|e| e.to_string())?;
-        // A source that could not be read is a gap in the scan; it is reported as such.
-        if !problems.is_empty() {
-            report["checked"]["sourcesNotRead"] = json!(problems);
-        }
-        Ok(report)
+        // Places that could not be read travel in checked.sourcesNotRead.
+        serde_json::to_value(quick::scan_pc()).map_err(|e| e.to_string())
     })
 }
 
