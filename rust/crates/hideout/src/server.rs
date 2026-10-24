@@ -314,7 +314,8 @@ mod tests {
     fn start_test(idle: Duration) -> (Running, Worker) {
         let (etx, erx) = channel();
         let scan: crate::worker::ScanFn = Arc::new(|| Ok(json!({"app": "Hideout", "findings": []})));
-        let w = Worker::start(scan, etx);
+        let hunt: crate::worker::HuntFn = Arc::new(|_, _| Err("no deep check in server tests".into()));
+        let w = Worker::start(scan, hunt, etx);
         let cfg = Config { ui_html: "<html>ui</html>", version: "test".into(), idle_exit: idle, log: Arc::new(|_| {}) };
         (start(w.clone(), erx, cfg).unwrap(), w)
     }

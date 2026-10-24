@@ -74,7 +74,7 @@ pub fn run(args: &[String]) -> i32 {
     };
 
     let (etx, erx) = channel();
-    let w = Worker::start(worker::real_scan(), etx);
+    let w = Worker::start(worker::real_scan(), worker::real_hunt(dir.clone()), etx);
     let cfg = Config { ui_html: UI_HTML, version: env!("CARGO_PKG_VERSION").into(), idle_exit: Duration::from_secs(90), log: log.clone() };
     let running = match server::start(w.clone(), erx, cfg) {
         Ok(r) => r,

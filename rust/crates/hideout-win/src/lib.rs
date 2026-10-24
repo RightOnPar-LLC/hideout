@@ -11,12 +11,16 @@
 
 #![deny(unsafe_op_in_unsafe_fn)]
 
+pub mod accounts;
 pub mod admin;
 pub mod authenticode;
+pub mod certs;
 pub mod com;
 pub mod crypto;
+pub mod elevate;
 pub mod env;
 pub mod links;
+pub mod net;
 pub mod pipe;
 pub mod registry;
 pub mod services;

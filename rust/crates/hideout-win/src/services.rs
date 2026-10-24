@@ -113,6 +113,10 @@ pub fn list(kind: Kind) -> Result<Vec<Service>, String> {
                 ..Default::default()
             };
             read_config(&scm, &mut s);
+            if !s.config_read {
+                // WMI's word for a start type it cannot read.
+                s.start = "Unknown".into();
+            }
             out.push(s);
         }
         if !more {
