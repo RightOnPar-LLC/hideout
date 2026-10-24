@@ -14,8 +14,16 @@
 //! compared against); the Hideout binary itself never does.
 
 mod fixtures;
+mod hunt;
+
+/// hunt.ps1's sixteen sections - the deep check is compared on exactly these.
+pub const HUNT_SECTIONS: [&str; 16] = [
+    "hideout", "scheduledTasks", "services", "drivers", "registryAutoruns", "startupFolders", "wmiSubscriptions", "defender",
+    "rootCertificates", "network", "processes", "recentFiles", "powershellProfiles", "browserExtensions", "hostsAndProxy", "accounts",
+];
 
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -70,6 +78,7 @@ fn main() {
     let code = match args.first().map(String::as_str) {
         Some("quick") => quick(&args[1..]),
         Some("fixtures") => fixture_run(&args[1..]),
+        Some("hunt") => hunt_run(&args[1..]),
         _ => {
             eprintln!("usage: hideout-parity quick [--test-targets <file>] [--report <file.json>] [--rust <hideout.exe>] [--repo <dir>]");
             2
@@ -472,6 +481,111 @@ fn fixture_run(args: &[String]) -> i32 {
         println!("fixtures kept in {}", built.root.display());
     }
     if parity == 0 && fails.is_empty() { 0 } else { 1 }
+}
+
+/// The organisation in a certificate subject (O=, else CN=), as both engines read it.
+fn org(subject: &str) -> String {
+    let lower = subject.to_lowercase();
+    for key in ["o=", "cn="] {
+        if let Some(i) = lower.find(key) {
+            let rest = &subject[i + key.len()..];
+            let rest = rest.strip_prefix('"').unwrap_or(rest);
+            return rest[..rest.find([',', '"']).unwrap_or(rest.len())].trim().to_string();
+        }
+    }
+    String::new()
+}
+
+/// True when this file's catalog signer is `ps` and its own (embedded) signer is `rust`.
+fn signer_proof(path: &str, ps: &str, rust: &str) -> bool {
+    if path.is_empty() {
+        return false;
+    }
+    let (emb, cat) = hideout_win::authenticode::check_each(Path::new(path));
+    let Some(cat) = cat else { return false };
+    org(&cat.subject).eq_ignore_ascii_case(ps) && org(&emb.subject).eq_ignore_ascii_case(rust)
+}
+
+fn wmi_rows(ns: &str, q: &str) -> Vec<Map<String, Value>> {
+    hideout_win::wmi::query(ns, q, 50_000).unwrap_or_default()
+}
+
+/// `hideout-parity hunt`: hunt.ps1 then `hideout hunt`, compared section by section.
+fn hunt_run(args: &[String]) -> i32 {
+    let repo = find_repo(opt(args, "--repo"));
+    let rust = opt(args, "--rust").map(PathBuf::from).unwrap_or_else(default_rust);
+    let work = temp_dir();
+    let (ps_out, rs_out) = (work.join("ps-hunt.json"), work.join("rust-hunt.json"));
+    let ps_started = hideout_win::time::now_local().sortable();
+    let ps = PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into())).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+    let t0 = std::time::Instant::now();
+    let st = Command::new(ps).args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]).arg(repo.join("hunt.ps1")).arg("-Out").arg(&ps_out).stdout(std::process::Stdio::null()).status();
+    let ps_secs = t0.elapsed().as_secs_f64();
+    if !st.map(|s| s.success()).unwrap_or(false) || !ps_out.exists() {
+        eprintln!("hideout-parity: hunt.ps1 did not finish");
+        return 2;
+    }
+    let t1 = std::time::Instant::now();
+    let st = Command::new(&rust).arg("hunt").arg("--out").arg(&rs_out).stdout(std::process::Stdio::null()).status();
+    let rs_secs = t1.elapsed().as_secs_f64();
+    if !st.map(|s| s.success()).unwrap_or(false) || !rs_out.exists() {
+        eprintln!("hideout-parity: hideout hunt did not finish");
+        return 2;
+    }
+    let read = |p: &Path| -> Value { std::fs::read_to_string(p).ok().and_then(|t| serde_json::from_str(t.trim_start_matches('\u{feff}')).ok()).unwrap_or(Value::Null) };
+    let (pv, rv) = (read(&ps_out), read(&rs_out));
+    // Evidence, taken right after both runs.
+    let alive = wmi_rows(r"root\cimv2", "SELECT ProcessId, Name, CreationDate FROM Win32_Process")
+        .into_iter()
+        .filter_map(|r| {
+            let created = r.get("CreationDate").and_then(|v| v.as_str()).and_then(hideout_win::wmi::wmi_datetime_to_unix).and_then(hideout_win::time::local_from_unix).map(|l| l.sortable()).unwrap_or_default();
+            Some((r.get("ProcessId")?.as_u64()?, (r.get("Name").and_then(|v| v.as_str()).unwrap_or("").to_string(), created)))
+        })
+        .collect();
+    // What hunt.ps1's own cmdlets see (Get-CimInstance can return less than WMI does).
+    let cim = ps_json(
+        "$d = [object[]]@(Get-CimInstance Win32_SystemDriver | ForEach-Object { $_.Name })\r\n\
+         $n = [object[]]@(Get-CimInstance Win32_Service | Where-Object { -not $_.PathName } | ForEach-Object { $_.Name })\r\n\
+         $o = New-Object psobject; $o | Add-Member drivers $d; $o | Add-Member noPath $n\r\n\
+         $o | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $OutFile -Encoding UTF8",
+        &work,
+        "cim",
+    )
+    .unwrap_or(Value::Null);
+    let strs = |v: &Value| as_list(v).iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>();
+    let cx = hunt::Context { ps_started, alive, wmi_drivers: strs(&cim["drivers"]), wmi_no_path: strs(&cim["noPath"]), signer_proof };
+    let (diffs, counts) = hunt::compare(&pv, &rv, &cx);
+    let unexplained: Vec<&hunt::D> = diffs.iter().filter(|d| d.explained.is_none()).collect();
+    println!("timing: hunt.ps1 {ps_secs:.1}s, hideout hunt {rs_secs:.1}s");
+    println!("{:<20} {:>6} {:>6} {:>8} {:>10} {:>12}", "section", "ps", "rust", "matched", "explained", "UNEXPLAINED");
+    for (sec, (p, r, m)) in &counts {
+        let e = diffs.iter().filter(|d| &d.section == sec && d.explained.is_some()).count();
+        let u = diffs.iter().filter(|d| &d.section == sec && d.explained.is_none()).count();
+        println!("{sec:<20} {p:>6} {r:>6} {m:>8} {e:>10} {u:>12}");
+    }
+    let mut by_id: BTreeMap<&str, usize> = BTreeMap::new();
+    for id in diffs.iter().filter_map(|d| d.explained) {
+        *by_id.entry(id).or_default() += 1;
+    }
+    for (id, n) in &by_id {
+        println!("  explained {id}: {n}");
+    }
+    for d in unexplained.iter().take(80) {
+        println!("  UNEXPLAINED [{}] {} - {}", d.section, d.key, d.what);
+    }
+    println!("parity hunt: {} difference(s), {} explained, {} UNEXPLAINED", diffs.len(), diffs.len() - unexplained.len(), unexplained.len());
+    if let Some(path) = opt(args, "--report") {
+        let rep = json!({
+            "known": hunt::KNOWN.iter().map(|(id, why)| json!({"id": id, "why": why})).collect::<Vec<_>>(),
+            "seconds": {"ps": ps_secs, "rust": rs_secs},
+            "sections": counts.iter().map(|(k, (p, r, m))| json!({"section": k, "ps": p, "rust": r, "matched": m})).collect::<Vec<_>>(),
+            "differences": diffs.iter().map(|d| json!({"section": d.section, "key": d.key, "what": d.what, "explained": d.explained})).collect::<Vec<_>>(),
+            "ps": pv, "rust": rv,
+        });
+        let _ = std::fs::write(&path, serde_json::to_string_pretty(&rep).unwrap_or_default());
+    }
+    let _ = std::fs::remove_dir_all(&work);
+    if unexplained.is_empty() { 0 } else { 1 }
 }
 
 fn quick(args: &[String]) -> i32 {
