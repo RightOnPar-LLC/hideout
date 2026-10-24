@@ -6,6 +6,7 @@
 //!      signed); if a catalog vouches for it, verify through the catalog;
 //!   2. if there is no catalog, or the catalog answer is not Valid, verify the signature
 //!      embedded in the file itself.
+//!
 //! The Windows error code is then turned into the same status names PowerShell uses
 //! (Valid, NotSigned, HashMismatch, NotTrusted, NotSupportedFileFormat, Incompatible,
 //! UnknownError), plus two of Hideout's own for files it could not open.

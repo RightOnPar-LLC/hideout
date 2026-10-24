@@ -10,6 +10,8 @@ use std::net::TcpStream;
 
 pub const MAX_HEADER_BYTES: usize = 16 * 1024;
 pub const MAX_HEADERS: usize = 64;
+/// The most of an oversized upload that is read (and thrown away) before answering 413.
+pub const MAX_DRAIN: usize = 8 * 1024 * 1024;
 
 #[derive(Debug)]
 pub struct Request {
@@ -147,6 +149,9 @@ pub fn read_request(stream: &TcpStream, body_limit: impl Fn(&str, &str) -> usize
     if let Some(l) = lens.first() {
         let n: usize = l.parse().map_err(|_| ReadError::Bad("bad content-length"))?;
         if n > body_limit(&req.method, req.path()) {
+            // Read the upload to its end (discarding it, capped) so the sender gets a
+            // real 413 rather than a connection torn mid-upload.
+            let _ = std::io::copy(&mut r.by_ref().take(n.min(MAX_DRAIN) as u64), &mut std::io::sink());
             return Err(ReadError::TooLarge);
         }
         let mut body = vec![0u8; n];
@@ -259,7 +264,7 @@ mod tests {
     #[test]
     fn caps_header_size_and_count() {
         let mut big = b"GET / HTTP/1.1\r\nX: ".to_vec();
-        big.extend(std::iter::repeat(b'a').take(MAX_HEADER_BYTES + 10));
+        big.extend(std::iter::repeat_n(b'a', MAX_HEADER_BYTES + 10));
         big.extend_from_slice(b"\r\n\r\n");
         assert_eq!(roundtrip(&big, 0).unwrap_err(), ReadError::Bad("headers too large"));
         let mut many = b"GET / HTTP/1.1\r\n".to_vec();

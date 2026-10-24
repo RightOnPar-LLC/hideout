@@ -187,7 +187,7 @@ impl Key {
 }
 
 fn utf16(data: &[u8]) -> Vec<u16> {
-    data.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect()
+    data.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect()
 }
 
 /// .NET semantics: drop ONE trailing NUL from a string value; keep anything before it.

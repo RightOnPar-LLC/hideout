@@ -9,7 +9,7 @@
 
   Reports land in -Out, which the host maps back out. ASCII-only.
 #>
-param([ValidateSet('clean', 'dirty')][string]$Mode = 'clean', [string]$Out = 'C:\out')
+param([ValidateSet('clean', 'dirty')][string]$Mode = 'clean', [string]$Out = 'C:\out', [switch]$NoShutdown)
 $ErrorActionPreference = 'Continue'
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $log = Join-Path $Out "$Mode-log.txt"
@@ -69,5 +69,5 @@ try {
   Say "ERROR: $($_.Exception.Message)"
 } finally {
   Set-Content -LiteralPath (Join-Path $Out "$Mode-done.txt") -Value (Get-Date -Format s)
-  Stop-Computer -Force
+  if (-not $NoShutdown) { Stop-Computer -Force }
 }

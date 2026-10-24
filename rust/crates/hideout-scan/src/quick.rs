@@ -403,7 +403,7 @@ pub fn scan(targets: &[Target], installed: &Installed) -> QuickReport {
             reasons: f.reasons,
         });
     }
-    findings.sort_by(|a, b| b.score.cmp(&a.score));
+    findings.sort_by_key(|f| std::cmp::Reverse(f.score));
     QuickReport {
         app: "Hideout".into(),
         version: 1,
