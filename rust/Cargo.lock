@@ -46,11 +46,17 @@ version = "0.2.0"
 [[package]]
 name = "hideout-money"
 version = "0.2.0"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "hideout-parity"
 version = "0.2.0"
 dependencies = [
+ "hideout-money",
  "hideout-win",
  "serde_json",
 ]
