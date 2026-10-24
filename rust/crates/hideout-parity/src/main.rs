@@ -166,10 +166,35 @@ fn startup_dirs() -> Vec<PathBuf> {
     ]
 }
 
-/// Compare the two target lists. Returns the per-kind counts of explained Rust-only
-/// targets, so the totals can be checked after taking them out.
-fn compare_targets(ps: &[Value], rs: &[Value], wmi_no_path: &[String], diffs: &mut Vec<Diff>) -> Map<String, Value> {
-    let mut explained_by_kind = Map::new();
+/// Rust-only targets that are explained, so the totals and findings that follow from
+/// them can be checked after taking them out - and nothing else.
+#[derive(Default)]
+struct Explained {
+    by_kind: Map<String, Value>,
+    in_user: u64,
+    /// (kind, name) lower-case, and the reason id.
+    targets: Vec<(String, String, &'static str)>,
+}
+
+/// hideout.ps1's "is this a sideloading target" test, for counting explained targets.
+fn counts_in_user(exe: &str) -> bool {
+    let l = exe.to_lowercase();
+    let b = l.as_bytes();
+    if b.len() < 3 || !b[0].is_ascii_alphabetic() || &l[1..3] != r":\" {
+        return false;
+    }
+    let rest = &l[3..];
+    let user_dir = rest.strip_prefix(r"users\").and_then(|r| r.split_once('\\')).map(|(_, after)| {
+        [r"appdata\", r"downloads\", r"desktop\", r"documents\"].iter().any(|p| after.starts_with(p))
+    });
+    let writable = rest.starts_with(r"programdata\") || rest.starts_with(r"users\public\") || rest.starts_with(r"windows\temp\") || user_dir == Some(true);
+    let program = [".exe", ".dll", ".ocx", ".cpl", ".scr", ".com"].iter().any(|e| l.ends_with(e));
+    writable && program && !l.contains(r"\appdata\local\microsoft\windowsapps\") && std::fs::metadata(exe).is_ok()
+}
+
+/// Compare the two target lists, and return what the Rust-only targets explain.
+fn compare_targets(ps: &[Value], rs: &[Value], wmi_no_path: &[String], diffs: &mut Vec<Diff>) -> Explained {
+    let mut ex = Explained::default();
     let key = |t: &Value| format!("{}|{}|{}", s(t, "kind"), s(t, "name"), s(t, "exe")).to_lowercase();
     let mut ps_keys: Vec<String> = ps.iter().map(key).collect();
     let mut rs_left: Vec<&Value> = Vec::new();
@@ -196,13 +221,17 @@ fn compare_targets(ps: &[Value], rs: &[Value], wmi_no_path: &[String], diffs: &m
         } else {
             None
         };
-        if explained.is_some() {
-            let n = explained_by_kind.get(&kind).and_then(|v| v.as_u64()).unwrap_or(0) + 1;
-            explained_by_kind.insert(kind.clone(), Value::from(n));
+        if let Some(id) = explained {
+            let n = ex.by_kind.get(&kind).and_then(|v| v.as_u64()).unwrap_or(0) + 1;
+            ex.by_kind.insert(kind.clone(), Value::from(n));
+            if counts_in_user(&s(t, "exe")) {
+                ex.in_user += 1;
+            }
+            ex.targets.push((kind.to_lowercase(), name.to_lowercase(), id));
         }
         diffs.push(Diff { area: "targets".into(), key: key(t), ps: json!("missing"), rust: json!("present"), explained });
     }
-    explained_by_kind
+    ex
 }
 
 fn finding_key(f: &Value) -> String {
@@ -244,7 +273,8 @@ fn only_hidden_files_differ(ps: &Value, rs: &Value) -> bool {
     pr.keys().all(|k| rr.contains_key(k))
 }
 
-fn compare_quick(ps: &Value, rs: &Value, explained_by_kind: &Map<String, Value>, diffs: &mut Vec<Diff>) {
+fn compare_quick(ps: &Value, rs: &Value, ex: &Explained, diffs: &mut Vec<Diff>) {
+    let explained_by_kind = &ex.by_kind;
     let mut field = |area: &str, key: &str, a: Value, b: Value| {
         if a != b {
             diffs.push(Diff { area: area.into(), key: key.into(), ps: a, rust: b, explained: None });
@@ -266,6 +296,9 @@ fn compare_quick(ps: &Value, rs: &Value, explained_by_kind: &Map<String, Value>,
             }
         }
         bk.retain(|_, v| v.as_u64() != Some(0));
+    }
+    if let Some(c) = rs.pointer_mut("/checked/inUserFolders") {
+        *c = Value::from(c.as_u64().unwrap_or(0).saturating_sub(ex.in_user));
     }
     let rs = &rs;
     for k in ["app", "version", "computer", "admin"] {
@@ -319,7 +352,9 @@ fn compare_quick(ps: &Value, rs: &Value, explained_by_kind: &Map<String, Value>,
     }
     for r in rf {
         let k = finding_key(&r);
-        let explained = only_hidden_files_differ(&json!({}), &r).then_some("hidden-file-in-program-folder");
+        // A finding on a target only the Rust engine could see carries that target's reason.
+        let from_target = ex.targets.iter().find(|(kind, name, _)| *kind == s(&r, "kind").to_lowercase() && *name == s(&r, "name").to_lowercase()).map(|t| t.2);
+        let explained = from_target.or_else(|| only_hidden_files_differ(&json!({}), &r).then_some("hidden-file-in-program-folder"));
         diffs.push(Diff { area: "findings".into(), key: k, ps: json!("missing"), rust: r, explained });
     }
 }
@@ -400,7 +435,7 @@ fn quick(args: &[String]) -> i32 {
     let ep = engine_path.display().to_string().replace('\'', "''");
 
     let mut diffs = Vec::new();
-    let mut explained_by_kind = Map::new();
+    let mut explained = Explained::default();
     let t0 = std::time::Instant::now();
     let (ps_report, rs_report);
     if let Some(tt) = &test_targets {
@@ -421,7 +456,7 @@ fn quick(args: &[String]) -> i32 {
         match (ps_json(&script, &work, "ps-targets"), rust_json(&rust, &["scan", "--list-targets"])) {
             (Ok(p), Ok(r)) => {
                 let no_path: Vec<String> = as_list(p.get("wmiNoPath").unwrap_or(&Value::Null)).iter().filter_map(|v| v.as_str().map(String::from)).collect();
-                explained_by_kind = compare_targets(&as_list(p.get("targets").unwrap_or(&Value::Null)), &as_list(&r), &no_path, &mut diffs);
+                explained = compare_targets(&as_list(p.get("targets").unwrap_or(&Value::Null)), &as_list(&r), &no_path, &mut diffs);
             }
             (a, b) => {
                 eprintln!("hideout-parity: target listing failed: ps={:?} rust={:?}", a.err(), b.err());
@@ -442,7 +477,7 @@ fn quick(args: &[String]) -> i32 {
             return 2;
         }
     };
-    compare_quick(&ps_report, &rs_report, &explained_by_kind, &mut diffs);
+    compare_quick(&ps_report, &rs_report, &explained, &mut diffs);
 
     let unexplained = diffs.iter().filter(|d| d.explained.is_none()).count();
     println!(
@@ -496,21 +531,21 @@ mod tests {
     fn identical_reports_have_no_differences() {
         let r = report(json!([finding("high", &["Tampered file"])]));
         let mut d = Vec::new();
-        compare_quick(&r, &r, &Map::new(), &mut d);
+        compare_quick(&r, &r, &Explained::default(), &mut d);
         assert!(d.is_empty(), "{d:?}");
     }
 
     #[test]
     fn a_severity_change_is_unexplained() {
         let mut d = Vec::new();
-        compare_quick(&report(json!([finding("high", &["Tampered file"])])), &report(json!([finding("medium", &["Tampered file"])])), &Map::new(), &mut d);
+        compare_quick(&report(json!([finding("high", &["Tampered file"])])), &report(json!([finding("medium", &["Tampered file"])])), &Explained::default(), &mut d);
         assert_eq!(d.iter().filter(|x| x.explained.is_none()).count(), 1);
     }
 
     #[test]
     fn a_missing_finding_is_unexplained() {
         let mut d = Vec::new();
-        compare_quick(&report(json!([finding("high", &["Tampered file"])])), &report(json!([])), &Map::new(), &mut d);
+        compare_quick(&report(json!([finding("high", &["Tampered file"])])), &report(json!([])), &Explained::default(), &mut d);
         assert_eq!(d.iter().filter(|x| x.explained.is_none()).count(), 1);
     }
 
@@ -520,7 +555,7 @@ mod tests {
         let b = report(json!([]));
         a["checked"]["startItems"] = json!(2);
         let mut d = Vec::new();
-        compare_quick(&a, &b, &Map::new(), &mut d);
+        compare_quick(&a, &b, &Explained::default(), &mut d);
         assert!(d.iter().any(|x| x.key == "startItems" && x.explained.is_none()));
     }
 
@@ -540,5 +575,18 @@ mod tests {
         extra["folder"] = json!(r"C:\elsewhere\Other");
         let x = fixtures::check(&report(json!([finding("high", &["Tampered file"]), extra])), &expected, "rust");
         assert!(x.iter().any(|f| f.contains("EXTRA")), "{x:?}");
+    }
+}
+
+#[cfg(test)]
+mod count_tests {
+    #[test]
+    fn counts_in_user_matches_the_engine_rule() {
+        let tmp = std::env::temp_dir().join("hideout-parity-count.exe");
+        std::fs::write(&tmp, b"x").unwrap();
+        // %TEMP% is under the user's AppData: counted.
+        assert!(super::counts_in_user(&tmp.to_string_lossy()));
+        std::fs::remove_file(&tmp).ok();
+        assert!(!super::counts_in_user("C:/nope.exe"));
     }
 }

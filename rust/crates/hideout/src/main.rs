@@ -7,7 +7,11 @@
 
 #![forbid(unsafe_code)]
 
+mod app;
 mod cli;
+mod http;
+mod server;
+mod worker;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -17,10 +21,7 @@ fn main() {
             println!("hideout {}", env!("CARGO_PKG_VERSION"));
             0
         }
-        _ => {
-            eprintln!("the app window arrives in the next commit; use `hideout scan`");
-            2
-        }
+        _ => app::run(&args),
     };
     std::process::exit(code);
 }
