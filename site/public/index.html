@@ -99,23 +99,39 @@
       <div class="shot chat">
         <div class="msg you">A man called me about a virus and I let him on my computer. I sent him money with Zelle. Can you check my bank charges?</div>
         <div class="msg bot"><span class="note">• Money: things went wrong on Aug 14</span>I'm sorry this happened — these callers are very convincing, and it's not your fault. Since Aug 14: a $1,500 Zelle payment, a $49 remote-access program, and $299.99 a month to "Tech Support Solutions".<br><br><b>Do this first:</b> call your bank using the number printed on your card. Say it was a scam. Zelle moves fast, so speed matters.</div>
-        <div class="letter">
-          <h4>Letter to your bank — Netflix</h4>
-          <p>I cancelled my Netflix subscription on 5 August 2026. The charge of $17.99 on 1 September 2026 was taken after my cancellation.</p>
-          <p class="bracket">[Confirm: I have not used the service since cancelling]</p>
-          <p>Please reverse this charge and block further charges from this merchant.<br>[Your name] · [Last 4 digits of card]</p>
-          <div class="lbtns"><span>Copy letter</span><span>Open in my email</span></div>
-        </div>
       </div>
       <div class="explain" id="guide">
-        <h2>The guide</h2>
+        <h2>The guide — try it here</h2>
+        <p>An AI assistant, powered by Claude, that walks you through what to do, one step at a time, in plain words. It says it's an AI, and it can be wrong. It remembers where you left off on this device only — ticking a step saves it here, in your browser, nothing is uploaded. You send the letters. Hideout never logs into your accounts, never cancels anything and never sends email for you.</p>
+        <ol class="guide-steps">
+          <li><button class="guide-step" data-step="0">Mark done</button> Stop the bleeding: end the remote session, change passwords from a clean device, turn on two-step sign-in.</li>
+          <li><button class="guide-step" data-step="1">Mark done</button> List what they took: money sent, cards used, accounts touched, and the date it happened.</li>
+          <li><button class="guide-step" data-step="2">Mark done</button> Call your bank on the number printed on your card — not a number from the caller. Say it was a scam.</li>
+          <li><button class="guide-step" data-step="3">Mark done</button> Check for still-charging: any company charging again after you cancelled, with the cancel date and the charge date.</li>
+          <li><button class="guide-step" data-step="4">Mark done</button> Send the letters below, one at a time. Keep copies.</li>
+          <li><button class="guide-step" data-step="5">Mark done</button> Watch for the second scam: anyone offering to "recover" your money for a fee or remote access is a scam.</li>
+        </ol>
+        <p><button id="guide-clear">Clear my guide progress on this device</button></p>
+        <h3>Write a letter</h3>
+        <p><label>Company / bank: <input id="guide-who" placeholder="[Company name]"></label></p>
+        <p><label>Amount: <input id="guide-amt" placeholder="[$ amount]"></label></p>
+        <p><label>Date charged: <input id="guide-date" placeholder="[Date]"></label></p>
+        <p><button id="guide-build">Build my letter</button> <button id="guide-copy">Copy letter</button></p>
+        <pre id="guide-letter">Your letter will appear here. Anything the guide cannot know goes in [brackets] for you to confirm or delete.</pre>
+        <h3>Deeper checks — scam drift, leaks, rogue AI, and evidence</h3>
         <ul>
-          <li><strong>An AI assistant, powered by Claude</strong>, that walks you through what to do, one step at a time, in plain words. It says it's an AI, and it can be wrong.</li>
-          <li><strong>It remembers where you left off</strong> — which steps are done, what you cancelled and when.</li>
+          <li><strong>Scam drift, since the scam date:</strong> new scheduled tasks, new services, new programs set to start at sign-in, new users on the PC, password or recovery-email changes, new email forwarding rules, and new devices on your accounts. Check these yourself — the guide never logs in to check them for you.</li>
+          <li><strong>Small test charges first:</strong> tiny charges, often $1 or less, before a large charge. Those are card-testing. Flag them for your bank with the same dates.</li>
+          <li><strong>API and secret leaks — look, never paste:</strong> files in startup folders, Downloads, or Documents that contain keys, tokens, or seed phrases. If you find one, rotate it at its provider first, then delete the file. Never paste a key, token, password, or seed phrase into this guide, into email, or into chat. This page never asks for one, and a real guide never will.</li>
+          <li><strong>Rogue AI and agents:</strong> AI browser extensions, agent tools, or remote-access programs installed around the scam date, and anything set to run by itself that can read your screen, files, or browser. If you did not install it, treat it as part of the scam until proven otherwise, and remove it through Windows Security, step by step.</li>
+          <li><strong>Drifting evidence — preserve it:</strong> do not delete the suspicious files, emails, call logs, or transaction records before your bank or a report asks for them. Save screenshots, transaction IDs, and dates. A file changed after signing, a new folder with a machine-made name, and a task created after the scam date are evidence, not just clutter.</li>
+          <li><strong>Browser drift:</strong> homepage or search changed, new extensions, saved passwords exported, or new bookmarks to fake bank sites. Reset those from your browser settings, on a clean device if you can.</li>
+        </ul>
+        <ul>
           <li><strong>Writes the letters</strong>: refund requests, cancellations, bank disputes. Anything it can't know from you goes in [brackets] for you to confirm or delete.</li>
-          <li><strong>You send them.</strong> Hideout never logs into your accounts, never cancels anything and never sends email for you.</li>
           <li><strong>Warns about the second scam</strong>: anyone offering to "recover" your money for a fee or remote access.</li>
         </ul>
+        <p class="fine">Refund odds and "tell your bank by" dates are general information, not legal or financial advice. Your bank's own terms decide.</p>
       </div>
     </div>
   </section>

@@ -133,3 +133,9 @@ footer a { color: var(--muted); }
   nav a:not(.gh) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+.guide-steps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.guide-steps li { padding-left: 0; }
+.guide-step, #guide-clear, #guide-build, #guide-copy { font: 600 12px var(--mono); border: 1px solid var(--line-hot); border-radius: 8px; padding: 6px 10px; color: var(--phos); background: transparent; cursor: pointer; margin-right: 8px; }
+.guide-step[aria-pressed="true"] { background: var(--phos); color: var(--void); }
+.explain input { background: rgba(3,6,5,.75); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); padding: 6px 8px; width: min(320px, 90%); }
+#guide-letter { white-space: pre-wrap; border: 1px solid var(--line-hot); border-radius: 12px; padding: 12px 14px; background: rgba(3,6,5,.75); font-size: 13.5px; }
