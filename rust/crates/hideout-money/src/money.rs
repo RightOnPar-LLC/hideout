@@ -214,6 +214,36 @@ impl Money {
         })
     }
 
+    /// Small test charges: card-testers often take $2.00 or less before a large charge.
+    /// Each one with the next charge of $20 or more within 14 days, if there is one.
+    /// None until a statement is imported (not checked is never "none found").
+    pub fn test_charges(&self) -> Option<Vec<Value>> {
+        if self.statements.is_empty() {
+            return None;
+        }
+        let rows = merge_rows(&self.statements_for_analysis());
+        let out: Vec<&crate::statement::Row> = rows.iter().filter(|r| r.direction == "out" && r.kind != "transfer").collect();
+        let mut found = Vec::new();
+        for r in out.iter().filter(|r| r.amount > 0.0 && r.amount <= 2.0) {
+            let Some(d0) = js::day_number(&r.date) else { continue };
+            let big = out.iter().filter(|x| x.amount >= 20.0).find(|x| js::day_number(&x.date).map(|d| d >= d0 && d - d0 <= 14).unwrap_or(false));
+            found.push(json!({
+                "date": r.date, "descriptor": r.descriptor, "amount": r.amount,
+                "afterIncident": self.incident.as_ref().map(|i| r.date >= *i),
+                "followedBy": big.map(|b| json!({"date": b.date, "descriptor": b.descriptor, "amount": b.amount})),
+            }));
+        }
+        Some(found)
+    }
+
+    pub fn incident_date(&self) -> Option<&str> {
+        self.incident.as_deref()
+    }
+
+    pub fn statement_count(&self) -> usize {
+        self.statements.len()
+    }
+
     /// Everything the window shows (local only).
     pub fn view(&self) -> Value {
         let s = self.summary();

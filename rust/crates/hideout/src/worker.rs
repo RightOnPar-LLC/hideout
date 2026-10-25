@@ -50,6 +50,8 @@ struct Inner {
     active: Option<u64>,
     latest_scan: Option<Value>,
     latest_hunt: Option<Value>,
+    scan_at: Option<std::time::Instant>,
+    hunt_at: Option<std::time::Instant>,
 }
 
 /// Runs the scan for real. Swappable so the server tests do not scan the PC.
@@ -155,6 +157,44 @@ impl Worker {
         })
     }
 
+    /// The latest quick scan and how many minutes ago it finished.
+    pub fn latest_scan(&self) -> Option<(Value, i64)> {
+        let i = self.lock();
+        Some((i.latest_scan.clone()?, i.scan_at.map(|t| (t.elapsed().as_secs() / 60) as i64).unwrap_or(0)))
+    }
+
+    /// The latest deep check ({at, admin, summary, changes}) and its age in minutes.
+    pub fn latest_hunt(&self) -> Option<(Value, i64)> {
+        let i = self.lock();
+        Some((i.latest_hunt.clone()?, i.hunt_at.map(|t| (t.elapsed().as_secs() / 60) as i64).unwrap_or(0)))
+    }
+
+    /// Is a job of this kind waiting or running?
+    pub fn running(&self, kind: &str) -> bool {
+        self.lock().jobs.iter().any(|j| j.kind == kind && (j.state == "queued" || j.state == "running"))
+    }
+
+    /// Wait for a job to finish: Ok when done, Err with its message when it failed or
+    /// did not finish in time.
+    pub fn wait(&self, id: u64, timeout: std::time::Duration) -> Result<(), String> {
+        let start = std::time::Instant::now();
+        loop {
+            if let Some(j) = self.lock().jobs.iter().find(|j| j.id == id) {
+                match j.state.as_str() {
+                    "done" => return Ok(()),
+                    "failed" => return Err(if j.message.is_empty() { "the job did not finish".into() } else { j.message.clone() }),
+                    _ => {}
+                }
+            } else {
+                return Err("the job is gone".into());
+            }
+            if start.elapsed() > timeout {
+                return Err("it did not finish in time".into());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        }
+    }
+
     /// Queue a job. The same kind already waiting or running is handed back instead of
     /// stacking a duplicate. Err for an unknown kind.
     pub fn enqueue(&self, kind: &str) -> Result<(u64, String), String> {
@@ -213,7 +253,10 @@ impl Worker {
                                 with_at.extend(m.clone());
                                 report = Value::Object(with_at);
                             }
-                            self.lock().latest_scan = Some(report);
+                            let mut i = self.lock();
+                            i.latest_scan = Some(report);
+                            i.scan_at = Some(std::time::Instant::now());
+                            drop(i);
                             Ok(format!("{n} finding(s)"))
                         }
                         Ok(Err(e)) => Err(format!("scan did not finish ({e})")),
@@ -230,7 +273,10 @@ impl Worker {
                             let summary = hunt::summarize(&snapshot);
                             let changes = prev.as_ref().map(|p| hunt::changes(p, &snapshot));
                             let was_admin = snapshot["admin"].as_bool().unwrap_or(false);
-                            self.lock().latest_hunt = Some(json!({"at": now(), "admin": was_admin, "summary": summary, "changes": changes}));
+                            let mut i = self.lock();
+                            i.latest_hunt = Some(json!({"at": now(), "admin": was_admin, "summary": summary, "changes": changes}));
+                            i.hunt_at = Some(std::time::Instant::now());
+                            drop(i);
                             Ok(format!("deep check done{}", if was_admin { " (with admin)" } else { "" }))
                         }
                         Ok(Err(e)) => Err(e),

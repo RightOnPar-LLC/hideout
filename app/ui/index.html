@@ -186,6 +186,14 @@
   .letter { white-space: pre-wrap; font: 13px/1.55 var(--sans); color: var(--ink); background: rgba(0, 0, 0, .35); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; max-height: 320px; overflow: auto; }
   .xcard .row { margin: 10px 0 0; }
   .trap { color: var(--amber); font-size: 13px; margin: 4px 0; } .trap::before { content: "! "; font-family: var(--mono); }
+  .track { margin: 8px 0 0; padding-left: 22px; display: grid; gap: 10px; }
+  .track li { font-size: 13.5px; color: var(--muted); }
+  .track li b { color: var(--ink); margin-right: 8px; }
+  .track li.t-done b { color: var(--phos); }
+  .track .mini { margin-top: 6px; }
+  .check { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 8px 0; background: rgba(3, 6, 5, .5); }
+  .check b { color: var(--ink); margin-right: 8px; }
+  .check ul { margin: 6px 0; padding-left: 20px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes blink { 50% { opacity: 0; } }
@@ -212,6 +220,8 @@
     <div id="findings"></div>
     <div id="deep"></div>
     <div id="case"></div>
+    <div id="steps"></div>
+    <div id="checks"></div>
     </div>
     <div id="tabMoney" role="tabpanel" hidden>
       <div class="verdict"><div class="radar"><div class="sweep"></div><div class="dot" id="mDot">$</div></div><div><h1 id="mHead">Where your money goes</h1><p id="mSub">Import a statement from your bank to see every repeating charge, anything still charging after you cancelled, and money that left after a scam.</p></div></div>
@@ -243,7 +253,7 @@
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = String(text); return n; }
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-  var state = { worker: null, ai: false, chatting: false };
+  var state = { worker: null, ai: false, offline: false, chatting: false };
 
   // ---------------- your PC ----------------
   function renderScan(scan) {
@@ -331,6 +341,53 @@
     box.appendChild(el("div", "note", "Tell the guide when you finish a step - it keeps this list for you."));
   }
 
+  // ---------------- the six steps and the deeper checks (builds that send them) ----------------
+  var TRACK = { "done": ["Done", "ok"], "in-progress": ["Under way", "warn"], "found": ["Needs you", "bad"], "checked": ["Checked", "ok"], "not-checked": ["Not checked yet", ""], "keep-watching": ["Keep watching", "warn"], "not-yet": ["To do", ""] };
+  function renderGuide(g) {
+    var box = $("steps"); clear(box);
+    if (!g || !g.tracker) return;
+    box.appendChild(el("h2", null, "Six steps through it"));
+    var ol = el("ol", "track");
+    g.tracker.forEach(function (t) {
+      var li = el("li", "t-" + t.status), top = el("div"), lab = TRACK[t.status] || TRACK["not-yet"];
+      top.appendChild(el("b", null, t.title)); top.appendChild(el("span", "chip" + (lab[1] ? " " + lab[1] : ""), lab[0]));
+      li.appendChild(top); li.appendChild(el("div", "note", t.text + (t.note ? " " + t.note : "")));
+      var b = el("button", "mini", t.status === "done" ? "Not done yet" : "Mark done"); b.type = "button";
+      b.addEventListener("click", function () { post("/api/guide/step", { step: t.step, done: t.status !== "done" }); });
+      li.appendChild(b); ol.appendChild(li);
+    });
+    box.appendChild(ol);
+    box.appendChild(el("div", "note", "Kept until Hideout closes."));
+    var cb = $("checks");
+    if (!cb.firstChild) {
+      var run = el("button", "mini", "Run the deeper checks"); run.type = "button";
+      run.addEventListener("click", function () {
+        run.textContent = "Looking..."; run.disabled = true;
+        post("/api/guide/checks", {}).then(function (x) { return x.json(); }).then(function (r) { renderChecks(r.checks || []); }).catch(function () { run.textContent = "Couldn't run them"; run.disabled = false; });
+      });
+      cb.appendChild(el("h2", null, "Deeper checks"));
+      cb.appendChild(el("div", "note", "Scam drift, small test charges, leaked keys or recovery phrases, rogue AI and agents, evidence to keep, browser drift. Read-only."));
+      cb.appendChild(run);
+    }
+  }
+  function renderChecks(list) {
+    var cb = $("checks"); clear(cb);
+    cb.appendChild(el("h2", null, "Deeper checks"));
+    list.forEach(function (c) {
+      var d = el("div", "check"), top = el("div");
+      top.appendChild(el("b", null, c.title));
+      top.appendChild(el("span", "chip" + (c.status === "found" ? " warn" : c.status === "nothing-found" ? " ok" : ""), c.status === "found" ? c.items.length + " found" : c.status === "nothing-found" ? "Nothing found" : "Not checked yet"));
+      d.appendChild(top);
+      if (c.why) d.appendChild(el("div", "note", c.why));
+      if (c.items && c.items.length) { var ul = el("ul"); c.items.slice(0, 20).forEach(function (i) { ul.appendChild(el("li", null, i)); }); d.appendChild(ul); }
+      (c.advice || []).forEach(function (a) { d.appendChild(el("div", "note", a)); });
+      cb.appendChild(d);
+    });
+    var again = el("button", "mini", "Run them again"); again.type = "button";
+    again.addEventListener("click", function () { post("/api/guide/checks", {}).then(function (x) { return x.json(); }).then(function (r) { renderChecks(r.checks || []); }); });
+    cb.appendChild(again);
+  }
+
   // ---------------- tabs ----------------
   function showTab(which) {
     var money = which === "money";
@@ -413,6 +470,14 @@
       row.appendChild(letter);
       b.appendChild(row); card.appendChild(b); box.appendChild(card);
     });
+    var dr = v.drift;
+    if (dr && (dr.newPayees.length || dr.newSubscriptions.length || dr.priceChanges.length)) {
+      box.appendChild(el("h2", null, "What changed since your first statement (" + dr.since + ")"));
+      dr.newSubscriptions.forEach(function (x) { box.appendChild(el("div", "trap", "New repeating charge: " + x.name + ", " + usd(x.lastAmount) + (CAD[x.cadence] ? " " + CAD[x.cadence] : "") + ", since " + x.firstDate)); });
+      dr.priceChanges.forEach(function (x) { box.appendChild(el("div", "trap", x.name + " went up from " + usd(x.from) + " to " + usd(x.to) + " on " + x.on)); });
+      dr.newPayees.slice(0, 15).forEach(function (x) { var r = el("div", "tx"); r.appendChild(el("span", "d", x.firstDate)); r.appendChild(el("span", null, "New payee: " + x.sample)); r.appendChild(el("span", "a", usd(x.total))); box.appendChild(r); });
+      box.appendChild(el("div", "note", "Some of these may be yours. Anything you don't recognise: ask the guide, or tell your bank."));
+    }
     box.appendChild(el("div", "note", "Imported: " + v.statements.map(function (x) { return x.name + " (" + x.rows + " rows)"; }).join(", ")));
   }
   function askCancelDate(row, r) {
@@ -510,7 +575,7 @@
   function sendChat(text) {
     text = (text || "").trim();
     if (!text || state.chatting) return;
-    if (!state.ai) { bubble("bot err", "The AI guide isn't connected on this PC (no Claude API key). Hideout's scans still work."); return; }
+    if (!state.ai && !state.offline) { bubble("bot err", "The AI guide isn't connected on this PC (no Claude API key). Hideout's scans still work."); return; }
     state.chatting = true; $("send").disabled = true; $("input").value = "";
     bubble("user", text);
     var box = bubble("bot"), notes = el("div"), body = el("div"), acc = "";
@@ -529,7 +594,7 @@
               if (ev.type === "text") { acc += ev.delta; renderMarkdown(body, acc); }
               else if (ev.type === "tool") notes.appendChild(el("div", "toolnote", "• " + ev.status));
               else if (ev.type === "pause") { if (acc && !/\n\s*$/.test(acc)) acc += "\n\n"; }
-              else if (ev.type === "card" && ev.card) { var holder = bubble("bot"); holder.appendChild(ev.card.type === "letter" ? letterCard(ev.card) : cancelCard(ev.card)); }
+              else if (ev.type === "card" && ev.card && (ev.card.type === "letter" || ev.card.type === "cancel")) { var holder = bubble("bot"); holder.appendChild(ev.card.type === "letter" ? letterCard(ev.card) : cancelCard(ev.card)); }
               else if (ev.type === "error") { box.className = "msg bot err"; if (!acc) clear(body); body.appendChild(el("p", null, ev.message)); }
               $("msgs").scrollTop = $("msgs").scrollHeight;
             });
@@ -546,17 +611,21 @@
   ["Am I hacked?", "What should I do first?", "Someone called me about a virus", "Check my bank charges"].forEach(function (s) {
     var b = el("button", null, s); b.type = "button"; b.addEventListener("click", function () { sendChat(s); }); $("suggest").appendChild(b);
   });
-  bubble("bot", "Hi - I'm the Hideout Guide, an AI assistant. I can explain what Hideout finds on this PC and walk you through what to do, one step at a time. What's going on?");
-
   // ---------------- live state ----------------
   fetch("/api/state").then(function (r) { return r.json(); }).then(function (s) {
-    state.ai = !!s.ai; $("ver").textContent = s.version === "dev" ? "dev build" : "v" + s.version;
-    renderMemory(s.memory); renderMoney(s.money);
-    if (!s.ai) $("aiNote").textContent = "The AI guide isn't connected on this PC. Scans still work.";
+    state.ai = !!s.ai; state.offline = !s.ai && s.aiMode === "offline"; $("ver").textContent = s.version === "dev" ? "dev build" : "v" + s.version;
+    renderMemory(s.memory); renderMoney(s.money); renderGuide(s.guide);
+    if (state.offline) {
+      $("aiNote").textContent = "Offline guide - no AI: Hideout's own steps, letters and checklists, from what it found. Nothing leaves this PC.";
+      bubble("bot", "Hi - I'm Hideout's offline guide. I'm not an AI and I'm not connected to the internet, but I can show you the steps, check your statements and this PC, and write letters for you to send. What's going on?");
+    } else {
+      if (!s.ai) $("aiNote").textContent = "The AI guide isn't connected on this PC. Scans still work.";
+      bubble("bot", "Hi - I'm the Hideout Guide, an AI assistant. I can be wrong, so check anything important with your bank or a trusted IT professional. I can explain what Hideout finds on this PC and walk you through what to do, one step at a time. What's going on?");
+    }
     renderWorker(s.worker);
   });
   var es = new EventSource("/api/events");
-  es.addEventListener("state", function (e) { try { var d = JSON.parse(e.data); renderWorker(d.worker); renderMemory(d.memory); renderMoney(d.money); } catch (x) {} });
+  es.addEventListener("state", function (e) { try { var d = JSON.parse(e.data); renderWorker(d.worker); renderMemory(d.memory); renderMoney(d.money); renderGuide(d.guide); } catch (x) {} });
   es.addEventListener("job", function (e) {
     try { var j = JSON.parse(e.data);
       if (j.state === "running" || j.state === "queued") { $("pill").textContent = "Scanning"; $("pill").className = "pill busy"; $("job").textContent = label(j.kind) + ": " + (j.progress || "working..."); ["btnScan", "btnHunt", "btnHuntAdmin"].forEach(function (id) { $(id).disabled = true; }); }

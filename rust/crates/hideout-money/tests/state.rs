@@ -69,9 +69,7 @@ fn installed_programs_and_remote_tools() {
     assert_eq!(remote_tools_in(&inst).iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["AnyDesk"]);
     let mut m = money();
     m.installed = Some(inst);
-    for f in ["bofa.csv"] {
-        m.import_statement(f, &fixture(f));
-    }
+    m.import_statement("bofa.csv", &fixture("bofa.csv"));
     let v = m.view();
     assert_eq!(v["remoteTools"][0]["name"], "AnyDesk");
     assert_eq!(v["recurring"].as_array().unwrap().iter().find(|r| r["merchant"] == "norton").unwrap()["onThisPc"][0], "Norton 360");
@@ -99,7 +97,7 @@ fn account_numbers_never_reach_the_guide() {
         for s in secrets {
             assert!(!text.contains(s), "{name} view leaked {s}");
             // Not even with its spaces or dashes taken out, inside the one long digit run.
-            assert!(!digits_only.contains(&format!("{s}")) || s.len() < 9, "{name} view leaked {s} (spread out)");
+            assert!(!digits_only.contains(s) || s.len() < 9, "{name} view leaked {s} (spread out)");
         }
         assert!(text.contains("••1746"), "{name}: masked to the last four, so a person can still tell which");
     }

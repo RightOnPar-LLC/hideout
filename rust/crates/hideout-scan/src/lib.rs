@@ -8,6 +8,7 @@
 
 pub mod autostart;
 pub mod hunt;
+pub mod leaks;
 pub mod par;
 pub mod pe;
 pub mod quick;

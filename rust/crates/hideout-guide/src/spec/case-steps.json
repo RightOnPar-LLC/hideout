@@ -1,0 +1,15 @@
+{
+ "disconnected_internet": "Disconnected the PC from the internet",
+ "hung_up_on_caller": "Hung up on the caller / stopped talking to them",
+ "removed_remote_access_tool": "Removed the remote-access tool they installed",
+ "changed_email_password": "Changed email password (from another device)",
+ "changed_bank_passwords": "Changed bank and money-app passwords",
+ "enabled_two_step": "Turned on two-step sign-in",
+ "checked_bank_activity": "Checked bank and card activity",
+ "contacted_bank": "Called the bank (number on the card)",
+ "windows_security_folder_scan": "Windows Security scan of the flagged folder",
+ "windows_security_full_scan": "Windows Security full scan",
+ "defender_offline_scan": "Microsoft Defender Offline scan",
+ "contacted_professional": "Got help from a trusted IT professional",
+ "reported_fraud": "Reported it to the fraud-reporting service"
+}
