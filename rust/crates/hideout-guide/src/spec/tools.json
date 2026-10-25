@@ -1,0 +1,209 @@
+[
+ {
+  "name": "get_scan_results",
+  "description": "Read the most recent Hideout quick scan of this PC: when it ran, what was checked, every finding (severity, program, where it starts from, the reasons, when it arrived) and antivirus status. Returns {scan: null} if no scan has run yet. Read-only.",
+  "input_schema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "run_quick_scan",
+  "description": "Run a fresh Hideout quick scan now (usually under a minute) and return its results. Checks everything set to start by itself for signs of hidden malware. Read-only: it never changes the PC.",
+  "input_schema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "start_deep_check",
+  "description": "Run Hideout's deep check (2-3 minutes): every scheduled task, service, driver, startup entry, security setting, network connection, recently added program and browser extension. Read-only. Only start it after the person agrees. with_admin=true sees more but makes Windows show a permission prompt the person must click Yes on.",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "with_admin": {
+     "type": "boolean",
+     "description": "Ask Windows for admin rights (the person must click Yes)."
+    }
+   },
+   "required": [
+    "with_admin"
+   ],
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "get_deep_check_summary",
+  "description": "Read the summary of the most recent deep check: counts per area and only the notable items (anything unusual a person could act on). Returns {deepCheck: null} if none has run. Read-only.",
+  "input_schema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "get_case_file",
+  "description": "Read this PC's case file from Hideout's encrypted local memory: when the case was opened, past scans and deep checks, and the status of every recovery step. Returns {caseFile: null} if memory is unavailable. Read-only.",
+  "input_schema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "update_case_step",
+  "description": "Record the status of ONE recovery step in the case file, after the person tells you about it. Writes only to Hideout's own memory - never to the PC.",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "step": {
+     "type": "string",
+     "enum": [
+      "disconnected_internet",
+      "hung_up_on_caller",
+      "removed_remote_access_tool",
+      "changed_email_password",
+      "changed_bank_passwords",
+      "enabled_two_step",
+      "checked_bank_activity",
+      "contacted_bank",
+      "windows_security_folder_scan",
+      "windows_security_full_scan",
+      "defender_offline_scan",
+      "contacted_professional",
+      "reported_fraud"
+     ],
+     "description": "Which recovery step."
+    },
+    "status": {
+     "type": "string",
+     "enum": [
+      "done",
+      "not_yet",
+      "not_applicable"
+     ],
+     "description": "done, not_yet, or not_applicable."
+    }
+   },
+   "required": [
+    "step",
+    "status"
+   ],
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "get_money_summary",
+  "description": "Read the Money tab: imported statements, repeating charges (how often, per month, status: active / still-charging / waiting / stopped / quiet), charges after a cancellation with act-by dates, price rises, refund odds and policy per company, money that left since the incident date, and remote-access programs installed on this PC. Read-only.",
+  "input_schema": {
+   "type": "object",
+   "properties": {},
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "set_incident_date",
+  "description": "Record the day things went wrong (the scam call, pop-up or remote session), after the person tells you. Hideout then lists the money that left since. Writes only to Hideout's own memory.",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "date": {
+     "type": "string",
+     "description": "YYYY-MM-DD, not in the future."
+    }
+   },
+   "required": [
+    "date"
+   ],
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "mark_canceled",
+  "description": "Record that the person cancelled a repeating charge, and on what day, after they tell you. Any later charge from that company is then flagged as STILL CHARGING. Writes only to Hideout's own memory.",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "merchant": {
+     "type": "string",
+     "description": "The merchant id from get_money_summary."
+    },
+    "canceled_on": {
+     "type": "string",
+     "description": "YYYY-MM-DD, not in the future."
+    }
+   },
+   "required": [
+    "merchant",
+    "canceled_on"
+   ],
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "show_cancel_steps",
+  "description": "Put the cancel steps for one company in front of the person: the company's own steps, known traps (like a 'pause' that keeps billing), refund odds, and a button that opens the company's real cancel page when they click it. Returns the same information to you. Never cancels anything.",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "merchant": {
+     "type": "string",
+     "description": "The merchant id from get_money_summary."
+    }
+   },
+   "required": [
+    "merchant"
+   ],
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ },
+ {
+  "name": "offer_letter",
+  "description": "Hand the person a letter you wrote, as a card with Copy and Open-in-email buttons. They review and send it themselves; Hideout never sends anything. Use placeholders in [square brackets] for personal details.",
+  "input_schema": {
+   "type": "object",
+   "properties": {
+    "kind": {
+     "type": "string",
+     "enum": [
+      "refund_request",
+      "cancel_by_email",
+      "bank_dispute"
+     ],
+     "description": "refund_request (to a company), cancel_by_email (to a company that accepts it), or bank_dispute (to the bank or card company)."
+    },
+    "merchant": {
+     "type": "string",
+     "description": "The merchant id from get_money_summary this letter is about, if any."
+    },
+    "subject": {
+     "type": "string",
+     "description": "Email subject line."
+    },
+    "body": {
+     "type": "string",
+     "description": "The full letter."
+    }
+   },
+   "required": [
+    "kind",
+    "subject",
+    "body"
+   ],
+   "additionalProperties": false
+  },
+  "eager_input_streaming": true
+ }
+]

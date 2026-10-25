@@ -33,6 +33,9 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 name = "hideout"
 version = "0.2.0"
 dependencies = [
+ "hideout-guide",
+ "hideout-money",
+ "hideout-redact",
  "hideout-scan",
  "hideout-win",
  "serde",
@@ -42,15 +45,30 @@ dependencies = [
 [[package]]
 name = "hideout-guide"
 version = "0.2.0"
+dependencies = [
+ "hideout-money",
+ "hideout-redact",
+ "regex",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "hideout-money"
 version = "0.2.0"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "hideout-parity"
 version = "0.2.0"
 dependencies = [
+ "hideout-guide",
+ "hideout-money",
+ "hideout-redact",
  "hideout-win",
  "serde_json",
 ]
@@ -58,11 +76,17 @@ dependencies = [
 [[package]]
 name = "hideout-redact"
 version = "0.2.0"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "hideout-scan"
 version = "0.2.0"
 dependencies = [
+ "hideout-redact",
  "hideout-win",
  "regex",
  "serde",

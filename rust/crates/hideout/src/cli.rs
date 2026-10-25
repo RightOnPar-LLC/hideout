@@ -46,19 +46,17 @@ pub fn scan(args: &[String]) -> i32 {
                 return 2;
             }
         },
-        None => {
-            let (t, problems) = quick::gather_targets();
-            for p in problems {
-                eprintln!("hideout scan: could not read {p}");
-            }
-            t
-        }
+        None => Vec::new(),
     };
     if list_targets {
-        println!("{}", serde_json::to_string_pretty(&targets).unwrap_or_else(|_| "[]".into()));
+        let t = if test_targets.is_some() { targets } else { quick::gather().targets };
+        println!("{}", serde_json::to_string_pretty(&t).unwrap_or_else(|_| "[]".into()));
         return 0;
     }
-    let report = quick::scan(&targets, &quick::Installed::read());
+    let report = if test_targets.is_some() { quick::scan(&targets, &quick::Installed::read()) } else { quick::scan_pc() };
+    for p in &report.checked.sources_not_read {
+        eprintln!("hideout scan: could not read {p}");
+    }
 
     if json {
         match serde_json::to_string_pretty(&report) {

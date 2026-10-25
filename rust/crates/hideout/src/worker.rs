@@ -2,13 +2,14 @@
 //! using the window. Every job is READ-ONLY.
 //!
 //!   scan        quick check of everything set to start by itself
-//!   hunt        deep check as the current user        (ported in Phase 3)
-//!   hunt-admin  deep check with admin rights          (ported in Phase 3)
+//!   hunt        deep check as the current user
+//!   hunt-admin  deep check with admin rights - Windows asks the person to click Yes
 //!
 //! The state it reports has the same shape as worker.mjs, so the window reads either.
 
-use hideout_scan::quick;
+use hideout_scan::{hunt, quick};
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
@@ -49,26 +50,70 @@ struct Inner {
     active: Option<u64>,
     latest_scan: Option<Value>,
     latest_hunt: Option<Value>,
+    scan_at: Option<std::time::Instant>,
+    hunt_at: Option<std::time::Instant>,
 }
 
 /// Runs the scan for real. Swappable so the server tests do not scan the PC.
 pub type ScanFn = Arc<dyn Fn() -> Result<Value, String> + Send + Sync>;
 
+/// Runs a deep check (admin or not), reporting progress lines. Returns the snapshot and
+/// the previous one from this PC (for "what changed"), if there was one.
+pub type HuntFn = Arc<dyn Fn(bool, &dyn Fn(String)) -> Result<(Value, Option<Value>), String> + Send + Sync>;
+
+/// The newest earlier deep check saved in `dir`.
+fn previous_hunt(dir: &Path) -> Option<Value> {
+    let mut files: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".json"))
+        .filter_map(|e| e.metadata().and_then(|m| m.modified()).ok().map(|t| (t, e.path())))
+        .collect();
+    files.sort();
+    let (_, p) = files.pop()?;
+    serde_json::from_slice(&std::fs::read(p).ok()?).ok()
+}
+
+pub fn real_hunt(data_dir: PathBuf) -> HuntFn {
+    Arc::new(move |admin: bool, progress: &dyn Fn(String)| {
+        let dir = data_dir.join("hunts");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("could not create the deep-check folder: {e}"))?;
+        let prev = previous_hunt(&dir);
+        let l = hideout_win::time::now_local();
+        let out = dir.join(format!("hunt-{}{}.json", l.sortable().replace(':', "-"), if admin { "-admin" } else { "" }));
+        if !admin {
+            let report = hunt::run(180, |line| progress(line.split_whitespace().collect::<Vec<_>>().join(" ")));
+            std::fs::write(&out, serde_json::to_string_pretty(&report).unwrap_or_default()).map_err(|e| format!("could not save the deep check: {e}"))?;
+            return Ok((report, prev));
+        }
+        // Elevation hands admin rights to exactly this program - the same binary that is
+        // running now, read-only, with no script beside it that could be swapped.
+        let me = std::env::current_exe().map_err(|e| e.to_string())?;
+        progress("Windows will ask for permission - click Yes to continue.".into());
+        let params = format!("hunt --out \"{}\"", out.display());
+        match hideout_win::elevate::run_as_admin(&me.to_string_lossy(), &params, 20 * 60 * 1000) {
+            hideout_win::elevate::Elevated::Declined => return Err("admin permission wasn't given (the Windows prompt was declined or timed out)".into()),
+            hideout_win::elevate::Elevated::TimedOut => return Err("the deep check with admin rights did not finish in 20 minutes".into()),
+            hideout_win::elevate::Elevated::Failed(e) => return Err(format!("could not start the deep check with admin rights ({e})")),
+            hideout_win::elevate::Elevated::Exited(0) => {}
+            hideout_win::elevate::Elevated::Exited(c) => return Err(format!("deep check did not finish (exit {c})")),
+        }
+        let report: Value = std::fs::read(&out).ok().and_then(|b| serde_json::from_slice(&b).ok()).ok_or("deep check did not finish (no report was written)")?;
+        Ok((report, prev))
+    })
+}
+
 pub fn real_scan() -> ScanFn {
     Arc::new(|| {
-        let (targets, problems) = quick::gather_targets();
-        let mut report = serde_json::to_value(quick::scan(&targets, &quick::Installed::read())).map_err(|e| e.to_string())?;
-        // A source that could not be read is a gap in the scan; it is reported as such.
-        if !problems.is_empty() {
-            report["checked"]["sourcesNotRead"] = json!(problems);
-        }
-        Ok(report)
+        // Places that could not be read travel in checked.sourcesNotRead.
+        serde_json::to_value(quick::scan_pc()).map_err(|e| e.to_string())
     })
 }
 
 #[derive(Clone)]
 pub struct Worker {
     inner: Arc<Mutex<Inner>>,
+    hunt: HuntFn,
     queue: Sender<u64>,
     events: Sender<Event>,
 }
@@ -79,9 +124,9 @@ fn now() -> String {
 }
 
 impl Worker {
-    pub fn start(scan: ScanFn, events: Sender<Event>) -> Worker {
+    pub fn start(scan: ScanFn, hunt: HuntFn, events: Sender<Event>) -> Worker {
         let (tx, rx) = channel::<u64>();
-        let w = Worker { inner: Arc::new(Mutex::new(Inner::default())), queue: tx, events };
+        let w = Worker { inner: Arc::new(Mutex::new(Inner::default())), hunt, queue: tx, events };
         let me = w.clone();
         std::thread::Builder::new().name("hideout-worker".into()).spawn(move || me.pump(rx, scan)).expect("worker thread");
         w
@@ -90,6 +135,11 @@ impl Worker {
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
         // A poisoned lock means a job panicked mid-update; the data is still usable.
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Tell every open window that something outside the jobs changed (Money's data).
+    pub fn notify_state(&self) {
+        let _ = self.events.send(Event::State);
     }
 
     pub fn busy(&self) -> bool {
@@ -105,6 +155,44 @@ impl Worker {
             "latestScan": i.latest_scan,
             "latestHunt": i.latest_hunt,
         })
+    }
+
+    /// The latest quick scan and how many minutes ago it finished.
+    pub fn latest_scan(&self) -> Option<(Value, i64)> {
+        let i = self.lock();
+        Some((i.latest_scan.clone()?, i.scan_at.map(|t| (t.elapsed().as_secs() / 60) as i64).unwrap_or(0)))
+    }
+
+    /// The latest deep check ({at, admin, summary, changes}) and its age in minutes.
+    pub fn latest_hunt(&self) -> Option<(Value, i64)> {
+        let i = self.lock();
+        Some((i.latest_hunt.clone()?, i.hunt_at.map(|t| (t.elapsed().as_secs() / 60) as i64).unwrap_or(0)))
+    }
+
+    /// Is a job of this kind waiting or running?
+    pub fn running(&self, kind: &str) -> bool {
+        self.lock().jobs.iter().any(|j| j.kind == kind && (j.state == "queued" || j.state == "running"))
+    }
+
+    /// Wait for a job to finish: Ok when done, Err with its message when it failed or
+    /// did not finish in time.
+    pub fn wait(&self, id: u64, timeout: std::time::Duration) -> Result<(), String> {
+        let start = std::time::Instant::now();
+        loop {
+            if let Some(j) = self.lock().jobs.iter().find(|j| j.id == id) {
+                match j.state.as_str() {
+                    "done" => return Ok(()),
+                    "failed" => return Err(if j.message.is_empty() { "the job did not finish".into() } else { j.message.clone() }),
+                    _ => {}
+                }
+            } else {
+                return Err("the job is gone".into());
+            }
+            if start.elapsed() > timeout {
+                return Err("it did not finish in time".into());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        }
     }
 
     /// Queue a job. The same kind already waiting or running is handed back instead of
@@ -165,14 +253,36 @@ impl Worker {
                                 with_at.extend(m.clone());
                                 report = Value::Object(with_at);
                             }
-                            self.lock().latest_scan = Some(report);
+                            let mut i = self.lock();
+                            i.latest_scan = Some(report);
+                            i.scan_at = Some(std::time::Instant::now());
+                            drop(i);
                             Ok(format!("{n} finding(s)"))
                         }
                         Ok(Err(e)) => Err(format!("scan did not finish ({e})")),
                         Err(_) => Err("scan did not finish (an internal error stopped it)".into()),
                     }
                 }
-                _ => Err("the deep check is not in this build yet - use the quick scan for now".into()),
+                k => {
+                    let admin = k == "hunt-admin";
+                    let me = self.clone();
+                    let progress = move |line: String| me.update(id, |j| j.progress.push(line.chars().take(120).collect()));
+                    let h = self.hunt.clone();
+                    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| h(admin, &progress))) {
+                        Ok(Ok((snapshot, prev))) => {
+                            let summary = hunt::summarize(&snapshot);
+                            let changes = prev.as_ref().map(|p| hunt::changes(p, &snapshot));
+                            let was_admin = snapshot["admin"].as_bool().unwrap_or(false);
+                            let mut i = self.lock();
+                            i.latest_hunt = Some(json!({"at": now(), "admin": was_admin, "summary": summary, "changes": changes}));
+                            i.hunt_at = Some(std::time::Instant::now());
+                            drop(i);
+                            Ok(format!("deep check done{}", if was_admin { " (with admin)" } else { "" }))
+                        }
+                        Ok(Err(e)) => Err(e),
+                        Err(_) => Err("deep check did not finish (an internal error stopped it)".into()),
+                    }
+                }
             };
             self.update(id, |j| {
                 match &result {
@@ -205,6 +315,17 @@ mod tests {
         })
     }
 
+    fn fake_hunt() -> HuntFn {
+        Arc::new(|admin: bool, progress: &dyn Fn(String)| {
+            progress("  scheduledTasks  3 item(s)  0.1s".into());
+            if admin {
+                return Err("admin permission wasn't given (the Windows prompt was declined or timed out)".into());
+            }
+            let snap = |n: usize| json!({"admin": false, "started": "s", "sections": {"scheduledTasks": {"ok": true, "items": (0..n).map(|i| json!({"path": "\\", "name": format!("t{i}"), "hidden": i == 0})).collect::<Vec<_>>()}}});
+            Ok((snap(3), Some(snap(2))))
+        })
+    }
+
     fn wait_done(w: &Worker, id: u64) -> Value {
         for _ in 0..200 {
             let s = w.state();
@@ -221,7 +342,7 @@ mod tests {
     #[test]
     fn runs_a_scan_and_keeps_the_result() {
         let (tx, _rx) = channel();
-        let w = Worker::start(fake(2), tx);
+        let w = Worker::start(fake(2), fake_hunt(), tx);
         let (id, st) = w.enqueue("scan").unwrap();
         assert_eq!(st, "queued");
         let j = wait_done(&w, id);
@@ -236,7 +357,7 @@ mod tests {
     #[test]
     fn duplicate_kind_is_not_stacked() {
         let (tx, _rx) = channel();
-        let w = Worker::start(fake(0), tx);
+        let w = Worker::start(fake(0), fake_hunt(), tx);
         let (a, _) = w.enqueue("scan").unwrap();
         let (b, _) = w.enqueue("scan").unwrap();
         assert_eq!(a, b);
@@ -244,24 +365,44 @@ mod tests {
     }
 
     #[test]
-    fn unknown_kind_is_refused_and_hunt_fails_honestly() {
+    fn unknown_kind_is_refused() {
         let (tx, _rx) = channel();
-        let w = Worker::start(fake(0), tx);
+        let w = Worker::start(fake(0), fake_hunt(), tx);
         assert!(w.enqueue("delete-everything").is_err());
+    }
+
+    #[test]
+    fn deep_check_gives_summary_and_changes() {
+        let (tx, _rx) = channel();
+        let w = Worker::start(fake(0), fake_hunt(), tx);
         let (id, _) = w.enqueue("hunt").unwrap();
         let j = wait_done(&w, id);
+        assert_eq!(j["state"], "done", "{j}");
+        let h = &w.state()["latestHunt"];
+        assert_eq!(h["summary"]["scheduledTasks"]["checked"], 3);
+        assert_eq!(h["summary"]["scheduledTasks"]["notable"].as_array().unwrap().len(), 1, "the hidden task");
+        assert_eq!(h["changes"]["sections"]["scheduledTasks"]["added"], json!([r"\t2"]));
+    }
+
+    #[test]
+    fn declined_admin_prompt_is_a_clear_failure() {
+        let (tx, _rx) = channel();
+        let w = Worker::start(fake(0), fake_hunt(), tx);
+        let (id, _) = w.enqueue("hunt-admin").unwrap();
+        let j = wait_done(&w, id);
         assert_eq!(j["state"], "failed");
-        assert!(j["message"].as_str().unwrap().contains("not in this build"));
+        assert!(j["message"].as_str().unwrap().contains("admin permission wasn't given"));
+        assert!(w.state()["latestHunt"].is_null());
     }
 
     #[test]
     fn a_failing_or_panicking_scan_is_failed_not_clean() {
         let (tx, _rx) = channel();
-        let w = Worker::start(Arc::new(|| Err("could not read services".into())), tx.clone());
+        let w = Worker::start(Arc::new(|| Err("could not read services".into())), fake_hunt(), tx.clone());
         let (id, _) = w.enqueue("scan").unwrap();
         assert_eq!(wait_done(&w, id)["state"], "failed");
         assert!(w.state()["latestScan"].is_null(), "a failed scan must not look like a result");
-        let w2 = Worker::start(Arc::new(|| panic!("boom")), tx);
+        let w2 = Worker::start(Arc::new(|| panic!("boom")), fake_hunt(), tx);
         let (id2, _) = w2.enqueue("scan").unwrap();
         assert_eq!(wait_done(&w2, id2)["state"], "failed");
     }

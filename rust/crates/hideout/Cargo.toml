@@ -13,5 +13,8 @@ path = "src/main.rs"
 [dependencies]
 hideout-win = { path = "../hideout-win" }
 hideout-scan = { path = "../hideout-scan" }
+hideout-money = { path = "../hideout-money" }
+hideout-guide = { path = "../hideout-guide" }
+hideout-redact = { path = "../hideout-redact" }
 serde.workspace = true
 serde_json.workspace = true

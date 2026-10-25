@@ -74,8 +74,21 @@ pub fn run(args: &[String]) -> i32 {
     };
 
     let (etx, erx) = channel();
-    let w = Worker::start(worker::real_scan(), etx);
-    let cfg = Config { ui_html: UI_HTML, version: env!("CARGO_PKG_VERSION").into(), idle_exit: Duration::from_secs(90), log: log.clone() };
+    let w = Worker::start(worker::real_scan(), worker::real_hunt(dir.clone()), etx);
+    let money = Arc::new(std::sync::Mutex::new(hideout_money::money::Money::new(None, Box::new(|| hideout_win::time::now_local().date()))));
+    let pc = Arc::new(crate::guide_app::AppPc::new(w.clone()));
+    let guide = Arc::new(hideout_guide::guide::Guide::new(crate::guide_app::make_transport(&dir, &*log), crate::guide_app::redactor(), pc.clone(), money.clone(), log.clone()));
+    let mode = guide.mode();
+    let cfg = Config {
+        ui_html: UI_HTML,
+        version: env!("CARGO_PKG_VERSION").into(),
+        idle_exit: Duration::from_secs(90),
+        log: log.clone(),
+        money: money.clone(),
+        open_url: Arc::new(server::open_external),
+        guide,
+        look_for_leaks: Arc::new(move || pc.look_for_leaks()),
+    };
     let running = match server::start(w.clone(), erx, cfg) {
         Ok(r) => r,
         Err(e) => {
@@ -91,7 +104,7 @@ pub fn run(args: &[String]) -> i32 {
         .name("hideout-pipe".into())
         .spawn(move || listener.serve(move || if !no_open { open_window(&u2, &p2) }))
         .ok();
-    log(&format!("started v{} on 127.0.0.1:{} (ai=off, memory=false, engine=rust)", env!("CARGO_PKG_VERSION"), running.port));
+    log(&format!("started v{} on 127.0.0.1:{} (ai={mode}, memory=false, engine=rust)", env!("CARGO_PKG_VERSION"), running.port));
     if !no_open {
         open_window(&url, &profile);
     }
@@ -101,9 +114,40 @@ pub fn run(args: &[String]) -> i32 {
         println!("Hideout is running (window opened). Close the window to quit.");
     }
     let _ = w.enqueue("scan"); // the first look happens on its own
+    // Installed programs (read-only), for "on your PC and on your bill" and remote-access tools.
+    let (m2, w2, log2) = (money.clone(), w.clone(), log.clone());
+    std::thread::Builder::new()
+        .name("hideout-installed".into())
+        .spawn(move || {
+            let list = installed_programs();
+            log2(&format!("installed programs: {}", list.len()));
+            m2.lock().unwrap_or_else(|p| p.into_inner()).installed = Some(list);
+            w2.notify_state();
+        })
+        .ok();
     let _ = running.idle.recv();
     log("window closed - exiting");
     0
+}
+
+/// The three Uninstall lists: name, publisher, install date. Read-only.
+fn installed_programs() -> Vec<hideout_money::money::Installed> {
+    use hideout_win::registry::{Hive, Key};
+    let mut entries = Vec::new();
+    for (hive, path) in [
+        (Hive::LocalMachine, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (Hive::LocalMachine, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (Hive::CurrentUser, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ] {
+        let Some(k) = Key::open(hive, path) else { continue };
+        for sub in k.subkeys() {
+            if let Some(e) = k.subkey(&sub) {
+                let g = |n: &str| e.string(n).unwrap_or_default();
+                entries.push((g("DisplayName"), g("Publisher"), g("InstallDate")));
+            }
+        }
+    }
+    hideout_money::money::installed_from(entries)
 }
 
 #[cfg(test)]

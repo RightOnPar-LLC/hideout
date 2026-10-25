@@ -8,4 +8,7 @@ publish.workspace = true
 
 [dependencies]
 hideout-win = { path = "../hideout-win" }
+hideout-money = { path = "../hideout-money" }
+hideout-redact = { path = "../hideout-redact" }
+hideout-guide = { path = "../hideout-guide" }
 serde_json.workspace = true

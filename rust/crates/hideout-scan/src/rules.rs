@@ -59,6 +59,38 @@ pub fn program_path(cmd: &str) -> Option<String> {
     re(&R, r"(?i)^(.+?\.(exe|dll|com|scr|cpl|ocx))(\s|,|$)").captures(&c).map(|m| m[1].to_string())
 }
 
+/// hunt.ps1's Get-ProgramPath: like `program_path`, but it also understands the
+/// kernel-style paths drivers and services use ("\??\C:\...", "\SystemRoot\...",
+/// "system32\..."), knows .sys files, and hands back the text itself when no program
+/// name is found in it (so nothing is silently dropped).
+pub fn program_path_ext(cmd: &str) -> Option<String> {
+    if cmd.trim().is_empty() {
+        return None;
+    }
+    let mut c = hideout_win::env::expand(cmd.trim());
+    let windir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
+    if let Some(rest) = c.strip_prefix(r"\??\") {
+        c = rest.to_string();
+    }
+    if c.len() >= 12 && c[..12].eq_ignore_ascii_case(r"\SystemRoot\") {
+        c = format!(r"{windir}\{}", &c[12..]);
+    } else if c.len() >= 9 && c[..9].eq_ignore_ascii_case(r"system32\") {
+        c = format!(r"{windir}\System32\{}", &c[9..]);
+    }
+    if let Some(rest) = c.strip_prefix('"') {
+        if let Some(end) = rest.find('"') {
+            if end >= 1 {
+                return Some(rest[..end].to_string());
+            }
+        }
+    }
+    static R: OnceLock<Regex> = OnceLock::new();
+    match re(&R, r"(?i)^(.+?\.(exe|dll|sys|com|scr|cpl|ocx))(\s|,|$)").captures(&c) {
+        Some(m) => Some(m[1].to_string()),
+        None => Some(c),
+    }
+}
+
 /// hideout.ps1 Get-TargetFromArgs: the first full path to a program in the arguments.
 pub fn target_from_args(args: &str) -> Option<String> {
     if args.is_empty() {
@@ -195,6 +227,17 @@ mod tests {
         assert_eq!(vendor_word("Microsoft Corporation").as_deref(), Some("Microsoft"));
         assert_eq!(vendor_word("HP Inc."), None);
         assert_eq!(vendor_word("Zoom Video (US)").as_deref(), Some("Zoom"));
+    }
+
+    #[test]
+    fn kernel_style_paths() {
+        let w = std::env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".into()).to_lowercase();
+        assert_eq!(program_path_ext(r"\SystemRoot\System32\drivers\x.sys").unwrap().to_lowercase(), format!(r"{w}\system32\drivers\x.sys"));
+        assert_eq!(program_path_ext(r"System32\drivers\x.sys").unwrap().to_lowercase(), format!(r"{w}\system32\drivers\x.sys"));
+        assert_eq!(program_path_ext(r"\??\C:\a\b.sys").as_deref(), Some(r"C:\a\b.sys"));
+        assert_eq!(program_path_ext("explorer.exe").as_deref(), Some("explorer.exe"));
+        assert_eq!(program_path_ext("/UserInstall").as_deref(), Some("/UserInstall"));
+        assert_eq!(program_path_ext("  "), None);
     }
 
     #[test]

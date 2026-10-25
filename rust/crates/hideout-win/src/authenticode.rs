@@ -117,16 +117,32 @@ pub fn check(path: &Path) -> Signature {
         Err(_) => return Signature { status: SigStatus::Unreadable, code: 0, subject: String::new(), from_catalog: false },
     };
     let wpath = Wide::new(&path.to_string_lossy());
-    // Catalogs index files by SHA-256 today and by SHA-1 in older catalogs that are
-    // still installed; a file listed only in an old catalog is still catalog-signed.
-    for alg in ["SHA256", "SHA1"] {
-        if let Some(sig) = from_catalog(&file, &wpath, alg) {
-            if sig.status == SigStatus::Valid {
-                return sig;
-            }
-        }
+    // Order: the signature inside the file first, the catalogs second. Both checks read
+    // the whole file, so doing the likely one first halves the work for the signed
+    // programs a scan meets most. A file without an embedded signature fails that check
+    // at once, before any hashing. (PowerShell asks the catalog first; the answer only
+    // differs for a file that is BOTH embedded-signed and catalog-listed, where the two
+    // may name different signers of the same publisher. See the phase report.)
+    let emb = embedded(&file, &wpath);
+    if emb.status == SigStatus::Valid {
+        return emb;
     }
-    embedded(&file, &wpath)
+    match from_catalog(&file, &wpath, "SHA256") {
+        Some(sig) if sig.status == SigStatus::Valid => sig,
+        _ => emb,
+    }
+}
+
+/// Both answers for one file, separately: its own (embedded) signature, and the catalog
+/// one if a catalog lists it. For the parity harness and the phase reports.
+pub fn check_each(path: &Path) -> (Signature, Option<Signature>) {
+    let missing = Signature { status: SigStatus::FileMissing, code: 0, subject: String::new(), from_catalog: false };
+    if !std::fs::metadata(path).map(|m| m.is_file()).unwrap_or(false) {
+        return (missing, None);
+    }
+    let Ok(file) = File::open(path) else { return (Signature { status: SigStatus::Unreadable, ..missing }, None) };
+    let wpath = Wide::new(&path.to_string_lossy());
+    (embedded(&file, &wpath), from_catalog(&file, &wpath, "SHA256"))
 }
 
 fn verify(data: &mut WINTRUST_DATA) -> (u32, String) {
@@ -255,7 +271,11 @@ pub(crate) unsafe fn cert_subject(cert: *const CERT_CONTEXT) -> String {
     unsafe { cert_name(cert, true) }
 }
 
-unsafe fn cert_name(cert: *const CERT_CONTEXT, subject: bool) -> String {
+/// .NET-style subject (true) or issuer (false) string of a certificate context.
+///
+/// # Safety
+/// `cert` must be null or a valid CERT_CONTEXT pointer for the duration of the call.
+pub(crate) unsafe fn cert_name(cert: *const CERT_CONTEXT, subject: bool) -> String {
     // SAFETY: null-checked; the blob lives inside the certificate context.
     unsafe {
         if cert.is_null() || (*cert).pCertInfo.is_null() {

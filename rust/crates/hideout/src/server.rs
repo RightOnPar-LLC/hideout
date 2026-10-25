@@ -25,11 +25,34 @@ const MAX_IMPORT: usize = 3 * 1024 * 1024;
 const MAX_CONNECTIONS: usize = 64;
 const CSP: &str = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
+/// Opens a vendor's cancel page in the person's own browser. Swappable for tests.
+pub type OpenUrl = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+
 pub struct Config {
     pub ui_html: &'static str,
     pub version: String,
     pub idle_exit: Duration,
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
+    pub money: Arc<Mutex<hideout_money::money::Money>>,
+    pub open_url: OpenUrl,
+    pub guide: Arc<hideout_guide::guide::Guide>,
+    /// Runs the read-only leak look-up (Desktop, Documents, Downloads, start-up folders).
+    pub look_for_leaks: Arc<dyn Fn() + Send + Sync>,
+}
+
+/// The real opener: the person's default browser, where they are signed in. Callers pass
+/// only URLs that came from Hideout's directory; this checks again that it is plain https
+/// with no user:password part, then hands it to Windows to open.
+pub fn open_external(url: &str) -> Result<(), String> {
+    let ok = url.len() > 8
+        && url.is_char_boundary(8)
+        && url[..8].eq_ignore_ascii_case("https://")
+        && !url[8..].split(['/', '?', '#']).next().unwrap_or("").contains('@')
+        && !url.contains(['"', ' ', '\n', '\r']);
+    if !ok {
+        return Err("refused".into());
+    }
+    std::process::Command::new("explorer.exe").arg(url).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 pub struct Running {
@@ -67,7 +90,10 @@ fn memory_state() -> Value {
 
 impl Shared {
     fn full_state(&self) -> Value {
-        json!({"worker": self.worker.state(), "memory": memory_state(), "money": null})
+        let money = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.cfg.money.lock().unwrap_or_else(|p| p.into_inner()).view())).unwrap_or(Value::Null);
+        let g = &self.cfg.guide;
+        let tracker = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| g.tracker())).unwrap_or_default();
+        json!({"worker": self.worker.state(), "memory": memory_state(), "money": money, "guide": {"mode": g.mode(), "tracker": tracker}})
     }
 
     fn broadcast(&self, event: &str, data: &Value) {
@@ -135,7 +161,7 @@ pub fn start(worker: Worker, events: Receiver<Event>, cfg: Config) -> std::io::R
     std::thread::Builder::new().name("hideout-idle".into()).spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1).min(s.cfg.idle_exit / 4).max(Duration::from_millis(50)));
         let no_clients = s.clients.lock().map(|c| c.is_empty()).unwrap_or(false);
-        if !s.ever_connected.load(Ordering::SeqCst) || !no_clients || s.worker.busy() {
+        if !s.ever_connected.load(Ordering::SeqCst) || !no_clients || s.worker.busy() || s.cfg.guide.busy() {
             continue;
         }
         let since = s.last_client.lock().map(|t| t.elapsed()).unwrap_or_default();
@@ -204,7 +230,8 @@ fn route(s: &Shared, stream: &mut TcpStream, req: Request) {
             s.cfg.ui_html.as_bytes(),
         ),
         ("GET", "/api/state") => {
-            let mut v = json!({"version": s.cfg.version, "ai": false, "aiMode": "off", "model": null});
+            let g = &s.cfg.guide;
+            let mut v = json!({"version": s.cfg.version, "ai": g.ai(), "aiMode": g.mode(), "model": if g.ai() { Some(hideout_guide::spec::MODEL) } else { None }});
             if let (Value::Object(a), Value::Object(b)) = (&mut v, s.full_state()) {
                 a.extend(b);
             }
@@ -224,8 +251,7 @@ fn route(s: &Shared, stream: &mut TcpStream, req: Request) {
 
 fn post(s: &Shared, stream: &mut TcpStream, p: &str, body: &Value) {
     if p.starts_with("/api/money/") {
-        // The Money tab is ported in Phase 4; until then it answers like a build without it.
-        return json_reply(stream, 404, &json!({"error": "money section unavailable"}));
+        return money_post(s, stream, p, body);
     }
     match p {
         "/api/scan" => {
@@ -235,16 +261,52 @@ fn post(s: &Shared, stream: &mut TcpStream, p: &str, body: &Value) {
                 Err(_) => json_reply(stream, 400, &json!({"error": "unknown kind"})),
             }
         }
-        "/api/chat/reset" => json_reply(stream, 200, &json!({"ok": true})),
+        "/api/chat/reset" => {
+            s.cfg.guide.reset();
+            json_reply(stream, 200, &json!({"ok": true}))
+        }
         "/api/chat" => {
             let msg = body.get("message").and_then(|m| m.as_str()).unwrap_or("").trim().to_string();
             if msg.is_empty() {
                 return json_reply(stream, 400, &json!({"error": "empty message"}));
             }
-            // The guide is ported in Phase 5. Same answer as a build with no guide.
-            if http::start_stream(stream, "application/x-ndjson; charset=utf-8").is_ok() {
-                let _ = stream.write_all(format!("{}\n", json!({"type": "error", "message": "The AI guide isn't connected on this PC."})).as_bytes());
+            if http::start_stream(stream, "application/x-ndjson; charset=utf-8").is_err() {
+                return;
             }
+            // The answer may take minutes (a deep check); each event goes out as it forms.
+            let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
+            let mut open = true;
+            s.cfg.guide.chat(&msg, &mut |ev| {
+                if open {
+                    open = stream.write_all(format!("{ev}\n").as_bytes()).and_then(|_| stream.flush()).is_ok();
+                }
+            });
+        }
+        // The six-step tracker: the person ticks a step.
+        "/api/guide/step" => {
+            let step = body.get("step").and_then(Value::as_u64);
+            let done = body.get("done").and_then(Value::as_bool);
+            match (step, done) {
+                (Some(i), Some(d)) if s.cfg.guide.tick(i as usize, d) => json_reply(stream, 200, &json!({"ok": true, "tracker": s.cfg.guide.tracker()})),
+                _ => json_reply(stream, 400, &json!({"error": "step must be 0-5 and done true or false"})),
+            }
+        }
+        // The letter builder (no AI): a repeating charge by id, or what the person typed.
+        "/api/guide/letter" => {
+            let st = |k: &str| body.get(k).and_then(Value::as_str).unwrap_or("").chars().take(200).collect::<String>();
+            let kind = st("kind");
+            if !hideout_guide::spec::LETTER_KINDS.contains(&kind.as_str()) {
+                return json_reply(stream, 400, &json!({"error": "unknown letter kind"}));
+            }
+            let merchant = st("merchant");
+            let typed = hideout_guide::letters::Typed { who: st("who"), amount: st("amount"), date: st("date") };
+            let card = s.cfg.guide.letter(&kind, (!merchant.is_empty()).then_some(merchant.as_str()), &typed);
+            json_reply(stream, 200, &card)
+        }
+        // The deeper checks: look for leaked secrets (read-only), then every check.
+        "/api/guide/checks" => {
+            (s.cfg.look_for_leaks)();
+            json_reply(stream, 200, &json!({"checks": s.cfg.guide.deeper_checks()}))
         }
         _ => text(stream, 404, "not found"),
     }
@@ -264,6 +326,51 @@ fn window_gone(stream: &TcpStream) -> bool {
     };
     let _ = stream.set_nonblocking(false);
     gone
+}
+
+fn money_post(s: &Shared, stream: &mut TcpStream, p: &str, body: &Value) {
+    let st = |k: &str| body.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let reply = {
+        let mut m = s.cfg.money.lock().unwrap_or_else(|e| e.into_inner());
+        match p {
+            "/api/money/import" => {
+                if hideout_money::js::trim(&st("text")).is_empty() {
+                    (400, json!({"ok": false, "warnings": ["That file is empty."]}))
+                } else {
+                    (200, m.import_statement(&st("name"), &st("text")))
+                }
+            }
+            "/api/money/incident" => (200, m.set_incident(&st("date"))),
+            "/api/money/cancel" => (200, m.mark_canceled(&st("merchant"), &st("on"))),
+            "/api/money/steps" => match m.cancel_info(&st("merchant")) {
+                Some(info) => (200, info),
+                None => (404, json!({"error": "unknown company"})),
+            },
+            // The URL comes from Hideout's directory by merchant id - never from the request.
+            "/api/money/open" => match m.cancel_url(&st("merchant")) {
+                None => (404, json!({"error": "no cancel page on file for that company"})),
+                Some(url) => match (s.cfg.open_url)(&url) {
+                    Ok(()) => (200, json!({"ok": true})),
+                    Err(_) => (400, json!({"error": "refused"})),
+                },
+            },
+            "/api/money/forget" => {
+                if body.get("confirm") != Some(&Value::Bool(true)) {
+                    (400, json!({"error": "confirm required"}))
+                } else {
+                    (200, m.forget_all())
+                }
+            }
+            _ => (404, Value::Null),
+        }
+    };
+    if reply.1.is_null() {
+        return text(stream, 404, "not found");
+    }
+    json_reply(stream, reply.0, &reply.1);
+    if p != "/api/money/steps" && p != "/api/money/open" {
+        s.broadcast("state", &s.full_state());
+    }
 }
 
 fn event_stream(s: &Shared, stream: &mut TcpStream) {
@@ -311,12 +418,98 @@ mod tests {
     use std::io::{BufRead, BufReader, Read};
     use std::sync::Arc;
 
-    fn start_test(idle: Duration) -> (Running, Worker) {
+    /// The test directory from the money selftest (netflix with a safe page, maxtest with
+    /// an off-domain one), and an opener that records instead of opening.
+    fn test_money() -> Arc<Mutex<hideout_money::money::Money>> {
+        let dir: Vec<hideout_money::directory::Merchant> = serde_json::from_value(json!([
+            {"provider": "netflix", "name": "Netflix", "category": "streaming", "descriptorPatterns": ["NETFLIX"], "domain": "netflix.com", "cancelUrl": "https://www.netflix.com/cancelplan", "cancelSteps": ["Sign in", "Account", "Cancel membership"], "refundLikelihood": "low"},
+            {"provider": "maxtest", "name": "Max", "category": "streaming", "descriptorPatterns": ["MAX"], "domain": "max.com", "cancelUrl": "https://evil.example/cancel", "refundLikelihood": "unknown"}
+        ]))
+        .unwrap();
+        Arc::new(Mutex::new(hideout_money::money::Money::new(Some(hideout_money::directory::prepare(dir)), Box::new(|| "2026-10-01".to_string()))))
+    }
+
+    fn start_with(idle: Duration, money: Arc<Mutex<hideout_money::money::Money>>, opened: Arc<Mutex<Vec<String>>>) -> (Running, Worker) {
         let (etx, erx) = channel();
         let scan: crate::worker::ScanFn = Arc::new(|| Ok(json!({"app": "Hideout", "findings": []})));
-        let w = Worker::start(scan, etx);
-        let cfg = Config { ui_html: "<html>ui</html>", version: "test".into(), idle_exit: idle, log: Arc::new(|_| {}) };
+        let hunt: crate::worker::HuntFn = Arc::new(|_, _| Err("no deep check in server tests".into()));
+        let w = Worker::start(scan, hunt, etx);
+        let open_url: OpenUrl = Arc::new(move |u: &str| {
+            opened.lock().unwrap().push(u.to_string());
+            Ok(())
+        });
+        // The offline guide (no transport), over the test worker.
+        let red = hideout_redact::Redactor::new(&hideout_redact::Identity { names: vec!["jdoe".into()], computer: "HOME-PC".into(), allowed_emails: vec![] });
+        let guide = Arc::new(hideout_guide::guide::Guide::new(None, red, Arc::new(crate::guide_app::AppPc::new(w.clone())), money.clone(), Arc::new(|_| {})));
+        let cfg = Config { ui_html: "<html>ui</html>", version: "test".into(), idle_exit: idle, log: Arc::new(|_| {}), money, open_url, guide, look_for_leaks: Arc::new(|| {}) };
         (start(w.clone(), erx, cfg).unwrap(), w)
+    }
+
+    fn start_test(idle: Duration) -> (Running, Worker) {
+        start_with(idle, test_money(), Arc::new(Mutex::new(Vec::new())))
+    }
+
+    const CHASE_CARD: &str = "Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n09/01/2026,09/02/2026,NETFLIX.COM,Entertainment,Sale,-15.49,\n08/28/2026,08/29/2026,Payment Thank You-Mobile,,Payment,500.00,\n08/15/2026,08/16/2026,SAFEWAY #1234,Groceries,Sale,-82.13,\n08/01/2026,08/02/2026,NETFLIX.COM,Entertainment,Sale,-15.49,\n07/22/2026,07/23/2026,SAFEWAY #1234,Groceries,Sale,-41.07,\n07/01/2026,07/02/2026,NETFLIX.COM,Entertainment,Sale,-15.49,\n07/05/2026,07/06/2026,\"AMAZON MKTPL*2K3LM4, SEATTLE\",Shopping,Sale,-23.50,\n07/19/2026,07/20/2026,AMAZON MKTPL*9Z8Y7X,Shopping,Return,23.50,\n";
+
+    /// The money selftest's H1-H7, against the Rust server.
+    #[test]
+    fn money_endpoints_behave_like_server_mjs() {
+        let opened = Arc::new(Mutex::new(Vec::new()));
+        let (r, _) = start_with(Duration::from_secs(60), test_money(), opened.clone());
+        let k = token_of(&r);
+        let me = format!("http://127.0.0.1:{}", r.port);
+        let jpost = |path: &str, v: Value| post(r.port, path, &k, &me, "application/json", &v.to_string());
+        // H1: bigger than the 64 KB chat limit, still imports (its own 3 MB limit).
+        let big = format!("{CHASE_CARD}{}", "\n".repeat(80_000));
+        let (st, _, body) = jpost("/api/money/import", json!({"name": "chase.csv", "text": big}));
+        let v: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!((st, v["ok"].as_bool(), v["rows"].as_u64()), (200, Some(true), Some(8)), "{body}");
+        // H2: over 3 MB is refused.
+        assert_eq!(jpost("/api/money/import", json!({"name": "x", "text": "x".repeat(3_200_000)})).0, 413);
+        // H3: cookie and same-origin are required.
+        assert_eq!(post(r.port, "/api/money/open", "", &me, "application/json", "{\"merchant\":\"netflix\"}").0, 403);
+        assert_eq!(post(r.port, "/api/money/open", &k, "https://evil.example", "application/json", "{\"merchant\":\"netflix\"}").0, 403);
+        assert!(opened.lock().unwrap().is_empty());
+        // H4: the directory's page opens, whatever url the request carries.
+        assert_eq!(jpost("/api/money/open", json!({"merchant": "netflix", "url": "https://evil.example/phish"})).0, 200);
+        assert_eq!(*opened.lock().unwrap(), vec!["https://www.netflix.com/cancelplan".to_string()]);
+        // H5: no safe page on file = nothing opens.
+        assert_eq!(jpost("/api/money/open", json!({"merchant": "maxtest"})).0, 404);
+        assert_eq!(jpost("/api/money/open", json!({"merchant": "nobody"})).0, 404);
+        assert_eq!(opened.lock().unwrap().len(), 1);
+        // Cancel steps, a cancel date, a refused future date, an incident date.
+        let (st, _, body) = jpost("/api/money/steps", json!({"merchant": "netflix"}));
+        assert!(st == 200 && body.contains("Cancel membership") && body.contains("\"canOpen\":true"), "{body}");
+        assert_eq!(jpost("/api/money/steps", json!({"merchant": "nobody"})).0, 404);
+        let (_, _, body) = jpost("/api/money/cancel", json!({"merchant": "netflix", "on": "2026-08-05"}));
+        assert!(body.contains("\"ok\":true"), "{body}");
+        let (_, _, body) = jpost("/api/money/cancel", json!({"merchant": "netflix", "on": "2027-01-01"}));
+        assert!(body.contains("future"), "{body}");
+        assert!(jpost("/api/money/incident", json!({"date": "2026-08-14"})).2.contains("\"ok\":true"));
+        // H7: the window's state carries the Money view, now showing STILL CHARGING.
+        let (_, _, body) = get(r.port, "/api/state", &k);
+        let s: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(s["money"]["statements"].as_array().unwrap().len(), 1);
+        assert_eq!(s["money"]["recurring"][0]["merchant"], "netflix");
+        assert_eq!(s["money"]["recurring"][0]["status"], "still-charging");
+        assert_eq!(s["money"]["saving"], false, "this build says plainly it is not saving");
+        // H6: forget needs an explicit confirm.
+        assert_eq!(jpost("/api/money/forget", json!({})).0, 400);
+        assert_eq!(jpost("/api/money/forget", json!({"confirm": true})).0, 200);
+        let (_, _, body) = get(r.port, "/api/state", &k);
+        assert!(serde_json::from_str::<Value>(&body).unwrap()["money"]["statements"].as_array().unwrap().is_empty());
+        // An empty file is refused with a reason.
+        let (st, _, body) = jpost("/api/money/import", json!({"name": "e.csv", "text": "  "}));
+        assert!(st == 400 && body.contains("empty"), "{body}");
+    }
+
+    #[test]
+    fn the_real_opener_refuses_anything_but_plain_https() {
+        assert!(open_external("http://x.example/").is_err());
+        assert!(open_external("https://user:pw@x.example/").is_err());
+        assert!(open_external("https://x.example/\" & calc").is_err());
+        assert!(open_external("file:///C:/Windows/System32/calc.exe").is_err());
+        assert!(open_external("https://").is_err());
     }
 
     fn raw(port: u16, req: &str) -> (u16, String, String) {
@@ -412,20 +605,64 @@ mod tests {
         let v: Value = serde_json::from_str(&body).unwrap();
         assert_eq!(v["version"], "test");
         assert_eq!(v["ai"], false);
+        assert_eq!(v["aiMode"], "offline");
+        assert_eq!(v["model"], Value::Null);
+        assert_eq!(v["guide"]["tracker"].as_array().unwrap().len(), 6);
         assert_eq!(v["memory"]["available"], false);
-        assert!(v["money"].is_null());
+        assert_eq!(v["money"]["saving"], false);
+        assert_eq!(v["money"]["statements"], json!([]));
+        assert_eq!(v["money"]["recurring"], json!([]));
         assert_eq!(v["worker"]["busy"], false);
     }
 
     #[test]
-    fn unported_sections_answer_like_a_build_without_them() {
+    fn unknown_routes_are_not_found() {
         let (r, _) = start_test(Duration::from_secs(60));
         let k = token_of(&r);
         let me = format!("http://127.0.0.1:{}", r.port);
-        assert_eq!(post(r.port, "/api/money/import", &k, &me, "application/json", "{\"text\":\"a\"}").0, 404);
-        let (st, _, body) = post(r.port, "/api/chat", &k, &me, "application/json", "{\"message\":\"hi\"}");
+        assert_eq!(post(r.port, "/api/money/no-such-thing", &k, &me, "application/json", "{}").0, 404);
+        assert_eq!(post(r.port, "/api/guide/no-such-thing", &k, &me, "application/json", "{}").0, 404);
+    }
+
+    /// No transport on this PC: the chat streams the offline guide as NDJSON (H13's shape).
+    #[test]
+    fn chat_streams_the_offline_guide() {
+        let (r, _) = start_test(Duration::from_secs(60));
+        let k = token_of(&r);
+        let me = format!("http://127.0.0.1:{}", r.port);
+        let (st, head, body) = post(r.port, "/api/chat", &k, &me, "application/json", "{\"message\":\"what do I do first?\"}");
         assert_eq!(st, 200);
-        assert!(body.contains("isn't connected"));
+        assert!(head.contains("application/x-ndjson"));
+        // The stream is chunked; pull the JSON lines out of it.
+        let events: Vec<Value> = body.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).filter(|v| v.is_object()).collect();
+        assert_eq!(events.last().unwrap()["type"], "done", "{body}");
+        let text: String = events.iter().filter(|e| e["type"] == "text").map(|e| e["delta"].as_str().unwrap()).collect();
+        assert!(text.contains("offline guide - not an AI") && text.contains("The six steps"), "{text}");
+        assert_eq!(post(r.port, "/api/chat", &k, &me, "application/json", "{\"message\":\"  \"}").0, 400);
+        assert_eq!(post(r.port, "/api/chat/reset", &k, &me, "application/json", "{}").0, 200);
+    }
+
+    #[test]
+    fn tracker_letters_and_checks_routes() {
+        let (r, _) = start_test(Duration::from_secs(60));
+        let k = token_of(&r);
+        let me = format!("http://127.0.0.1:{}", r.port);
+        let jpost = |path: &str, v: Value| post(r.port, path, &k, &me, "application/json", &v.to_string());
+        let (st, _, body) = jpost("/api/guide/step", json!({"step": 2, "done": true}));
+        assert_eq!(st, 200, "{body}");
+        assert_eq!(serde_json::from_str::<Value>(&body).unwrap()["tracker"][2]["status"], "done");
+        assert_eq!(jpost("/api/guide/step", json!({"step": 6, "done": true})).0, 400);
+        assert_eq!(jpost("/api/guide/step", json!({"step": "1", "done": true})).0, 400);
+        let (st, _, body) = jpost("/api/guide/letter", json!({"kind": "bank_dispute", "who": "Tech Support LLC", "amount": "$299.99", "date": "2026-08-14"}));
+        let card: Value = serde_json::from_str(&body).unwrap();
+        assert!(st == 200 && card["body"].as_str().unwrap().contains("$299.99 on 2026-08-14") && card["to"].is_null(), "{body}");
+        assert_eq!(jpost("/api/guide/letter", json!({"kind": "send_it_for_me"})).0, 400);
+        let (st, _, body) = jpost("/api/guide/checks", json!({}));
+        let checks: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(st, 200);
+        assert_eq!(checks["checks"].as_array().unwrap().len(), 6);
+        // A cross-site page cannot tick a step or build a letter.
+        assert_eq!(post(r.port, "/api/guide/step", &k, "https://evil.example", "application/json", "{\"step\":0,\"done\":true}").0, 403);
     }
 
     #[test]
