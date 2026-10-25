@@ -135,6 +135,11 @@ impl Worker {
         self.inner.lock().unwrap_or_else(|p| p.into_inner())
     }
 
+    /// Tell every open window that something outside the jobs changed (Money's data).
+    pub fn notify_state(&self) {
+        let _ = self.events.send(Event::State);
+    }
+
     pub fn busy(&self) -> bool {
         self.lock().active.is_some()
     }

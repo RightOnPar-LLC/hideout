@@ -1,6 +1,12 @@
 [package]
 name = "hideout-money"
+description = "Hideout's Money tab: bank statements read on this PC, repeating charges, still-charging-after-cancel, money that left after a scam. Never uploads, logs in, cancels or sends."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true

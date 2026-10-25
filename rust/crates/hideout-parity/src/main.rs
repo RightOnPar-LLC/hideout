@@ -15,6 +15,7 @@
 
 mod fixtures;
 mod hunt;
+mod money;
 
 /// hunt.ps1's sixteen sections - the deep check is compared on exactly these.
 pub const HUNT_SECTIONS: [&str; 16] = [
@@ -79,6 +80,10 @@ fn main() {
         Some("quick") => quick(&args[1..]),
         Some("fixtures") => fixture_run(&args[1..]),
         Some("hunt") => hunt_run(&args[1..]),
+        Some("money") => {
+            let cases = opt(&args[1..], "--cases").and_then(|c| c.parse().ok()).unwrap_or(5000);
+            money::run(&find_repo(opt(&args[1..], "--repo")), &temp_dir(), cases)
+        }
         _ => {
             eprintln!("usage: hideout-parity quick [--test-targets <file>] [--report <file.json>] [--rust <hideout.exe>] [--repo <dir>]");
             2

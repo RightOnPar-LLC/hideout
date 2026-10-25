@@ -1,0 +1,126 @@
+[
+ {
+  "provider": "netflix",
+  "name": "Netflix",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "NETFLIX"
+  ],
+  "domain": "netflix.com",
+  "cancelUrl": "https://www.netflix.com/cancelplan",
+  "cancelSteps": [
+   "Sign in",
+   "Account",
+   "Cancel membership"
+  ],
+  "traps": [],
+  "refundLikelihood": "low",
+  "refundBasis": "No refunds for partial months.",
+  "cancelByEmail": null,
+  "software": []
+ },
+ {
+  "provider": "spotify",
+  "name": "Spotify",
+  "category": "music",
+  "descriptorPatterns": [
+   "SPOTIFY"
+  ],
+  "domain": "spotify.com",
+  "cancelUrl": "https://www.spotify.com/account/subscription/",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "refundBasis": null,
+  "cancelByEmail": null,
+  "software": []
+ },
+ {
+  "provider": "adobe",
+  "name": "Adobe",
+  "category": "software",
+  "descriptorPatterns": [
+   "ADOBE"
+  ],
+  "domain": "adobe.com",
+  "cancelUrl": "https://account.adobe.com/plans",
+  "cancelSteps": [
+   "Sign in",
+   "Plans",
+   "Cancel"
+  ],
+  "traps": [
+   "Annual plan paid monthly: a fee after 14 days"
+  ],
+  "refundLikelihood": "decent",
+  "refundBasis": "Full refund within 14 days.",
+  "cancelByEmail": null,
+  "software": [
+   "Adobe Creative Cloud"
+  ]
+ },
+ {
+  "provider": "norton",
+  "name": "Norton",
+  "category": "security-software",
+  "descriptorPatterns": [
+   "NORTON"
+  ],
+  "domain": "norton.com",
+  "cancelUrl": "https://my.norton.com/",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "good",
+  "refundBasis": "60-day money-back.",
+  "cancelByEmail": null,
+  "software": [
+   "Norton 360"
+  ]
+ },
+ {
+  "provider": "apple",
+  "name": "Apple",
+  "category": "app-store",
+  "descriptorPatterns": [
+   "APPLE COM BILL"
+  ],
+  "domain": "apple.com",
+  "cancelUrl": "https://support.apple.com/en-us/118428",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "decent",
+  "refundBasis": "Request at reportaproblem.apple.com.",
+  "cancelByEmail": null,
+  "software": []
+ },
+ {
+  "provider": "maxtest",
+  "name": "Max",
+  "category": "streaming",
+  "descriptorPatterns": [
+   "MAX"
+  ],
+  "domain": "max.com",
+  "cancelUrl": "https://evil.example/cancel",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "cancelByEmail": null,
+  "software": []
+ },
+ {
+  "provider": "mailco",
+  "name": "MailCo",
+  "category": "software",
+  "descriptorPatterns": [
+   "MAILCO"
+  ],
+  "domain": "mailco.com",
+  "cancelUrl": "http://mailco.com/cancel",
+  "cancelSteps": [],
+  "traps": [],
+  "refundLikelihood": "unknown",
+  "cancelByEmail": "cancel@mailco.com",
+  "software": []
+ }
+]
