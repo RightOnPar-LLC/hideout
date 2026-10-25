@@ -76,6 +76,9 @@ pub fn run(args: &[String]) -> i32 {
     let (etx, erx) = channel();
     let w = Worker::start(worker::real_scan(), worker::real_hunt(dir.clone()), etx);
     let money = Arc::new(std::sync::Mutex::new(hideout_money::money::Money::new(None, Box::new(|| hideout_win::time::now_local().date()))));
+    let pc = Arc::new(crate::guide_app::AppPc::new(w.clone()));
+    let guide = Arc::new(hideout_guide::guide::Guide::new(crate::guide_app::make_transport(&dir, &*log), crate::guide_app::redactor(), pc.clone(), money.clone(), log.clone()));
+    let mode = guide.mode();
     let cfg = Config {
         ui_html: UI_HTML,
         version: env!("CARGO_PKG_VERSION").into(),
@@ -83,6 +86,8 @@ pub fn run(args: &[String]) -> i32 {
         log: log.clone(),
         money: money.clone(),
         open_url: Arc::new(server::open_external),
+        guide,
+        look_for_leaks: Arc::new(move || pc.look_for_leaks()),
     };
     let running = match server::start(w.clone(), erx, cfg) {
         Ok(r) => r,
@@ -99,7 +104,7 @@ pub fn run(args: &[String]) -> i32 {
         .name("hideout-pipe".into())
         .spawn(move || listener.serve(move || if !no_open { open_window(&u2, &p2) }))
         .ok();
-    log(&format!("started v{} on 127.0.0.1:{} (ai=off, memory=false, engine=rust)", env!("CARGO_PKG_VERSION"), running.port));
+    log(&format!("started v{} on 127.0.0.1:{} (ai={mode}, memory=false, engine=rust)", env!("CARGO_PKG_VERSION"), running.port));
     if !no_open {
         open_window(&url, &profile);
     }

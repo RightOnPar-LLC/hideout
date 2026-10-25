@@ -1,6 +1,14 @@
 [package]
 name = "hideout-guide"
+description = "The Hideout Guide: the spec, the conversation loop, its tools, the six-step tracker, letters and the offline guide. No network code: a transport is handed in."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[dependencies]
+hideout-redact = { path = "../hideout-redact" }
+hideout-money = { path = "../hideout-money" }
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
