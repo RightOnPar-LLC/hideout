@@ -52,12 +52,26 @@ $flags = @(
 )
 # The encoded form keeps paths with spaces intact (fields separated by 0x1F).
 $env:CARGO_ENCODED_RUSTFLAGS = ($flags -join [char]0x1f)
+# The guide's gateway address (an address, never a key) is compiled in from the
+# git-ignored app/gateway-url.txt, as the Node packager does. Without it the build's
+# guide is the offline guide unless HIDEOUT_GATEWAY_URL is set where it runs.
+$gwFile = Join-Path (Split-Path $ws -Parent) 'app\gateway-url.txt'
+$hadGw = Test-Path Env:\HIDEOUT_GATEWAY_URL
+if (-not $hadGw -and (Test-Path $gwFile)) {
+  $gw = (Get-Content $gwFile -Raw).Trim()
+  if ($gw -notmatch '^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$') { throw "app\gateway-url.txt must be https://host only" }
+  $env:HIDEOUT_GATEWAY_URL = $gw
+  'guide: gateway address compiled in from app\gateway-url.txt'
+} elseif (-not $hadGw) { 'guide: no gateway address - this build uses the offline guide unless HIDEOUT_GATEWAY_URL is set where it runs' }
 Push-Location $ws
 try {
   $pk = foreach ($p in $Packages) { '-p'; $p }
   & cargo build --release @pk
   if ($LASTEXITCODE -ne 0) { throw "cargo build failed ($LASTEXITCODE)" }
-} finally { Pop-Location; Remove-Item Env:\CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue }
+} finally {
+  Pop-Location; Remove-Item Env:\CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue
+  if (-not $hadGw) { Remove-Item Env:\HIDEOUT_GATEWAY_URL -ErrorAction SilentlyContinue }
+}
 
 # Re-read what was built. ASCII and UTF-16 both, case-insensitive.
 $bad = @()

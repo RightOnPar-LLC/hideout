@@ -35,6 +35,9 @@ pub struct Config {
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
     pub money: Arc<Mutex<hideout_money::money::Money>>,
     pub open_url: OpenUrl,
+    pub guide: Arc<hideout_guide::guide::Guide>,
+    /// Runs the read-only leak look-up (Desktop, Documents, Downloads, start-up folders).
+    pub look_for_leaks: Arc<dyn Fn() + Send + Sync>,
 }
 
 /// The real opener: the person's default browser, where they are signed in. Callers pass
@@ -88,7 +91,9 @@ fn memory_state() -> Value {
 impl Shared {
     fn full_state(&self) -> Value {
         let money = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.cfg.money.lock().unwrap_or_else(|p| p.into_inner()).view())).unwrap_or(Value::Null);
-        json!({"worker": self.worker.state(), "memory": memory_state(), "money": money})
+        let g = &self.cfg.guide;
+        let tracker = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| g.tracker())).unwrap_or_default();
+        json!({"worker": self.worker.state(), "memory": memory_state(), "money": money, "guide": {"mode": g.mode(), "tracker": tracker}})
     }
 
     fn broadcast(&self, event: &str, data: &Value) {
@@ -156,7 +161,7 @@ pub fn start(worker: Worker, events: Receiver<Event>, cfg: Config) -> std::io::R
     std::thread::Builder::new().name("hideout-idle".into()).spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1).min(s.cfg.idle_exit / 4).max(Duration::from_millis(50)));
         let no_clients = s.clients.lock().map(|c| c.is_empty()).unwrap_or(false);
-        if !s.ever_connected.load(Ordering::SeqCst) || !no_clients || s.worker.busy() {
+        if !s.ever_connected.load(Ordering::SeqCst) || !no_clients || s.worker.busy() || s.cfg.guide.busy() {
             continue;
         }
         let since = s.last_client.lock().map(|t| t.elapsed()).unwrap_or_default();
@@ -225,7 +230,8 @@ fn route(s: &Shared, stream: &mut TcpStream, req: Request) {
             s.cfg.ui_html.as_bytes(),
         ),
         ("GET", "/api/state") => {
-            let mut v = json!({"version": s.cfg.version, "ai": false, "aiMode": "off", "model": null});
+            let g = &s.cfg.guide;
+            let mut v = json!({"version": s.cfg.version, "ai": g.ai(), "aiMode": g.mode(), "model": if g.ai() { Some(hideout_guide::spec::MODEL) } else { None }});
             if let (Value::Object(a), Value::Object(b)) = (&mut v, s.full_state()) {
                 a.extend(b);
             }
@@ -255,16 +261,52 @@ fn post(s: &Shared, stream: &mut TcpStream, p: &str, body: &Value) {
                 Err(_) => json_reply(stream, 400, &json!({"error": "unknown kind"})),
             }
         }
-        "/api/chat/reset" => json_reply(stream, 200, &json!({"ok": true})),
+        "/api/chat/reset" => {
+            s.cfg.guide.reset();
+            json_reply(stream, 200, &json!({"ok": true}))
+        }
         "/api/chat" => {
             let msg = body.get("message").and_then(|m| m.as_str()).unwrap_or("").trim().to_string();
             if msg.is_empty() {
                 return json_reply(stream, 400, &json!({"error": "empty message"}));
             }
-            // The guide is ported in Phase 5. Same answer as a build with no guide.
-            if http::start_stream(stream, "application/x-ndjson; charset=utf-8").is_ok() {
-                let _ = stream.write_all(format!("{}\n", json!({"type": "error", "message": "The AI guide isn't connected on this PC."})).as_bytes());
+            if http::start_stream(stream, "application/x-ndjson; charset=utf-8").is_err() {
+                return;
             }
+            // The answer may take minutes (a deep check); each event goes out as it forms.
+            let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
+            let mut open = true;
+            s.cfg.guide.chat(&msg, &mut |ev| {
+                if open {
+                    open = stream.write_all(format!("{ev}\n").as_bytes()).and_then(|_| stream.flush()).is_ok();
+                }
+            });
+        }
+        // The six-step tracker: the person ticks a step.
+        "/api/guide/step" => {
+            let step = body.get("step").and_then(Value::as_u64);
+            let done = body.get("done").and_then(Value::as_bool);
+            match (step, done) {
+                (Some(i), Some(d)) if s.cfg.guide.tick(i as usize, d) => json_reply(stream, 200, &json!({"ok": true, "tracker": s.cfg.guide.tracker()})),
+                _ => json_reply(stream, 400, &json!({"error": "step must be 0-5 and done true or false"})),
+            }
+        }
+        // The letter builder (no AI): a repeating charge by id, or what the person typed.
+        "/api/guide/letter" => {
+            let st = |k: &str| body.get(k).and_then(Value::as_str).unwrap_or("").chars().take(200).collect::<String>();
+            let kind = st("kind");
+            if !hideout_guide::spec::LETTER_KINDS.contains(&kind.as_str()) {
+                return json_reply(stream, 400, &json!({"error": "unknown letter kind"}));
+            }
+            let merchant = st("merchant");
+            let typed = hideout_guide::letters::Typed { who: st("who"), amount: st("amount"), date: st("date") };
+            let card = s.cfg.guide.letter(&kind, (!merchant.is_empty()).then_some(merchant.as_str()), &typed);
+            json_reply(stream, 200, &card)
+        }
+        // The deeper checks: look for leaked secrets (read-only), then every check.
+        "/api/guide/checks" => {
+            (s.cfg.look_for_leaks)();
+            json_reply(stream, 200, &json!({"checks": s.cfg.guide.deeper_checks()}))
         }
         _ => text(stream, 404, "not found"),
     }
@@ -396,7 +438,10 @@ mod tests {
             opened.lock().unwrap().push(u.to_string());
             Ok(())
         });
-        let cfg = Config { ui_html: "<html>ui</html>", version: "test".into(), idle_exit: idle, log: Arc::new(|_| {}), money, open_url };
+        // The offline guide (no transport), over the test worker.
+        let red = hideout_redact::Redactor::new(&hideout_redact::Identity { names: vec!["jdoe".into()], computer: "HOME-PC".into(), allowed_emails: vec![] });
+        let guide = Arc::new(hideout_guide::guide::Guide::new(None, red, Arc::new(crate::guide_app::AppPc::new(w.clone())), money.clone(), Arc::new(|_| {})));
+        let cfg = Config { ui_html: "<html>ui</html>", version: "test".into(), idle_exit: idle, log: Arc::new(|_| {}), money, open_url, guide, look_for_leaks: Arc::new(|| {}) };
         (start(w.clone(), erx, cfg).unwrap(), w)
     }
 
@@ -560,6 +605,9 @@ mod tests {
         let v: Value = serde_json::from_str(&body).unwrap();
         assert_eq!(v["version"], "test");
         assert_eq!(v["ai"], false);
+        assert_eq!(v["aiMode"], "offline");
+        assert_eq!(v["model"], Value::Null);
+        assert_eq!(v["guide"]["tracker"].as_array().unwrap().len(), 6);
         assert_eq!(v["memory"]["available"], false);
         assert_eq!(v["money"]["saving"], false);
         assert_eq!(v["money"]["statements"], json!([]));
@@ -568,14 +616,53 @@ mod tests {
     }
 
     #[test]
-    fn unported_sections_answer_like_a_build_without_them() {
+    fn unknown_routes_are_not_found() {
         let (r, _) = start_test(Duration::from_secs(60));
         let k = token_of(&r);
         let me = format!("http://127.0.0.1:{}", r.port);
         assert_eq!(post(r.port, "/api/money/no-such-thing", &k, &me, "application/json", "{}").0, 404);
-        let (st, _, body) = post(r.port, "/api/chat", &k, &me, "application/json", "{\"message\":\"hi\"}");
+        assert_eq!(post(r.port, "/api/guide/no-such-thing", &k, &me, "application/json", "{}").0, 404);
+    }
+
+    /// No transport on this PC: the chat streams the offline guide as NDJSON (H13's shape).
+    #[test]
+    fn chat_streams_the_offline_guide() {
+        let (r, _) = start_test(Duration::from_secs(60));
+        let k = token_of(&r);
+        let me = format!("http://127.0.0.1:{}", r.port);
+        let (st, head, body) = post(r.port, "/api/chat", &k, &me, "application/json", "{\"message\":\"what do I do first?\"}");
         assert_eq!(st, 200);
-        assert!(body.contains("isn't connected"));
+        assert!(head.contains("application/x-ndjson"));
+        // The stream is chunked; pull the JSON lines out of it.
+        let events: Vec<Value> = body.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).filter(|v| v.is_object()).collect();
+        assert_eq!(events.last().unwrap()["type"], "done", "{body}");
+        let text: String = events.iter().filter(|e| e["type"] == "text").map(|e| e["delta"].as_str().unwrap()).collect();
+        assert!(text.contains("offline guide - not an AI") && text.contains("The six steps"), "{text}");
+        assert_eq!(post(r.port, "/api/chat", &k, &me, "application/json", "{\"message\":\"  \"}").0, 400);
+        assert_eq!(post(r.port, "/api/chat/reset", &k, &me, "application/json", "{}").0, 200);
+    }
+
+    #[test]
+    fn tracker_letters_and_checks_routes() {
+        let (r, _) = start_test(Duration::from_secs(60));
+        let k = token_of(&r);
+        let me = format!("http://127.0.0.1:{}", r.port);
+        let jpost = |path: &str, v: Value| post(r.port, path, &k, &me, "application/json", &v.to_string());
+        let (st, _, body) = jpost("/api/guide/step", json!({"step": 2, "done": true}));
+        assert_eq!(st, 200, "{body}");
+        assert_eq!(serde_json::from_str::<Value>(&body).unwrap()["tracker"][2]["status"], "done");
+        assert_eq!(jpost("/api/guide/step", json!({"step": 6, "done": true})).0, 400);
+        assert_eq!(jpost("/api/guide/step", json!({"step": "1", "done": true})).0, 400);
+        let (st, _, body) = jpost("/api/guide/letter", json!({"kind": "bank_dispute", "who": "Tech Support LLC", "amount": "$299.99", "date": "2026-08-14"}));
+        let card: Value = serde_json::from_str(&body).unwrap();
+        assert!(st == 200 && card["body"].as_str().unwrap().contains("$299.99 on 2026-08-14") && card["to"].is_null(), "{body}");
+        assert_eq!(jpost("/api/guide/letter", json!({"kind": "send_it_for_me"})).0, 400);
+        let (st, _, body) = jpost("/api/guide/checks", json!({}));
+        let checks: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(st, 200);
+        assert_eq!(checks["checks"].as_array().unwrap().len(), 6);
+        // A cross-site page cannot tick a step or build a letter.
+        assert_eq!(post(r.port, "/api/guide/step", &k, "https://evil.example", "application/json", "{\"step\":0,\"done\":true}").0, 403);
     }
 
     #[test]

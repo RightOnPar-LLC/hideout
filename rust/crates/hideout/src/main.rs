@@ -10,6 +10,7 @@
 
 mod app;
 mod cli;
+mod guide_app;
 mod http;
 mod hunt_cli;
 mod server;

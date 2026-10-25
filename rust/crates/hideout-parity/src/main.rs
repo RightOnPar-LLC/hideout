@@ -16,6 +16,8 @@
 mod fixtures;
 mod hunt;
 mod money;
+mod redact;
+mod guide_capture;
 
 /// hunt.ps1's sixteen sections - the deep check is compared on exactly these.
 pub const HUNT_SECTIONS: [&str; 16] = [
@@ -83,6 +85,19 @@ fn main() {
         Some("money") => {
             let cases = opt(&args[1..], "--cases").and_then(|c| c.parse().ok()).unwrap_or(5000);
             money::run(&find_repo(opt(&args[1..], "--repo")), &temp_dir(), cases)
+        }
+        Some("guide-capture") => {
+            let Some(gw) = opt(&args[1..], "--gateway") else {
+                eprintln!("usage: hideout-parity guide-capture --gateway https://<host> --out <capture.json> [--question <text>]");
+                std::process::exit(2);
+            };
+            let out = opt(&args[1..], "--out").unwrap_or_else(|| "guide-capture.json".into());
+            let q = opt(&args[1..], "--question").unwrap_or_else(|| "Someone called about a virus and I let them on my PC. Check my bank charges. I'm jane.tester on TEST-PC-0417, my card is 4111 1111 1111 1111 and my email is jane.tester1984@example.com.".into());
+            guide_capture::run(&gw, std::path::Path::new(&out), &q)
+        }
+        Some("redact") => {
+            let cases = opt(&args[1..], "--cases").and_then(|c| c.parse().ok()).unwrap_or(10000);
+            redact::run(&find_repo(opt(&args[1..], "--repo")), &temp_dir(), cases)
         }
         _ => {
             eprintln!("usage: hideout-parity quick [--test-targets <file>] [--report <file.json>] [--rust <hideout.exe>] [--repo <dir>]");
