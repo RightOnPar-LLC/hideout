@@ -87,6 +87,11 @@ fn object_to_json(obj: &IWbemClassObject) -> Map<String, Value> {
             m.insert(name.to_string(), variant_to_json(&v));
         }
         let _ = obj.EndEnumeration();
+        // The object's own class (a consumer's kind, e.g. CommandLineEventConsumer).
+        let mut cls = VARIANT::default();
+        if obj.Get(windows::core::w!("__CLASS"), 0, &mut cls, None, None).is_ok() {
+            m.insert("__CLASS".into(), variant_to_json(&cls));
+        }
     }
     m
 }

@@ -468,8 +468,12 @@ pub fn scan(targets: &[Target], installed: &Installed) -> QuickReport {
 /// The whole scan on this PC: the full surface, items with facts, findings.
 pub fn scan_pc() -> QuickReport {
     let g = gather();
-    let installed = Installed::read();
-    scan_full(&g.targets, &g.entries, &g.not_read, &installed, true)
+    scan_with(&g, &Installed::read(), true)
+}
+
+/// The scan over an already-read surface (the deep check reads it once and shares it).
+pub fn scan_with(g: &Gathered, installed: &Installed, with_facts: bool) -> QuickReport {
+    scan_full(&g.targets, &g.entries, &g.not_read, installed, with_facts)
 }
 
 fn scan_full(targets: &[Target], entries: &[Entry], not_read: &[String], installed: &Installed, with_facts: bool) -> QuickReport {

@@ -54,6 +54,41 @@ pub fn sha256_file_upper(path: &Path, cap: u64) -> std::io::Result<String> {
     Ok(hex(&sha256(&buf)).to_ascii_uppercase())
 }
 
+/// SHA-256 of a file of any size, read in 1 MB pieces (nothing big is held in memory).
+/// Upper-case hex like Get-FileHash.
+pub fn sha256_file_stream_upper(path: &Path) -> std::io::Result<String> {
+    use windows::Win32::Security::Cryptography::{BCryptCreateHash, BCryptDestroyHash, BCryptFinishHash, BCryptHashData, BCRYPT_HASH_HANDLE};
+    let mut f = std::fs::File::open(path)?;
+    let mut h = BCRYPT_HASH_HANDLE::default();
+    // SAFETY: SHA-256 pseudo-handle; Windows allocates the hash object itself.
+    let st = unsafe { BCryptCreateHash(BCRYPT_SHA256_ALG_HANDLE, &mut h, None, None, 0) };
+    if st.is_err() {
+        return Err(std::io::Error::other("could not start a hash"));
+    }
+    let mut buf = vec![0u8; 1 << 20];
+    let result = (|| {
+        loop {
+            let n = f.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            // SAFETY: a live hash handle and a slice of what was just read.
+            if unsafe { BCryptHashData(h, &buf[..n], 0) }.is_err() {
+                return Err(std::io::Error::other("hashing failed"));
+            }
+        }
+        let mut out = [0u8; 32];
+        // SAFETY: finishing the same live handle into a 32-byte buffer.
+        if unsafe { BCryptFinishHash(h, &mut out, 0) }.is_err() {
+            return Err(std::io::Error::other("hashing failed"));
+        }
+        Ok(hex(&out).to_ascii_uppercase())
+    })();
+    // SAFETY: destroying the handle created above, once.
+    let _ = unsafe { BCryptDestroyHash(h) };
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,6 +103,15 @@ mod tests {
             hex(&sha256(b"")),
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
+    }
+
+    #[test]
+    fn streaming_hash_matches_one_shot() {
+        let p = std::env::temp_dir().join(format!("hw-hash-{}", random_hex(4)));
+        let data: Vec<u8> = (0..3_000_000u32).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&p, &data).unwrap();
+        assert_eq!(sha256_file_stream_upper(&p).unwrap(), hex(&sha256(&data)).to_ascii_uppercase());
+        std::fs::remove_file(&p).ok();
     }
 
     #[test]

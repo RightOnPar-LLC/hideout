@@ -133,6 +133,18 @@ pub fn check(path: &Path) -> Signature {
     }
 }
 
+/// Both answers for one file, separately: its own (embedded) signature, and the catalog
+/// one if a catalog lists it. For the parity harness and the phase reports.
+pub fn check_each(path: &Path) -> (Signature, Option<Signature>) {
+    let missing = Signature { status: SigStatus::FileMissing, code: 0, subject: String::new(), from_catalog: false };
+    if !std::fs::metadata(path).map(|m| m.is_file()).unwrap_or(false) {
+        return (missing, None);
+    }
+    let Ok(file) = File::open(path) else { return (Signature { status: SigStatus::Unreadable, ..missing }, None) };
+    let wpath = Wide::new(&path.to_string_lossy());
+    (embedded(&file, &wpath), from_catalog(&file, &wpath, "SHA256"))
+}
+
 fn verify(data: &mut WINTRUST_DATA) -> (u32, String) {
     let mut action: GUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
     // SAFETY: `data` is fully initialised for the union member its dwUnionChoice names,
@@ -259,7 +271,11 @@ pub(crate) unsafe fn cert_subject(cert: *const CERT_CONTEXT) -> String {
     unsafe { cert_name(cert, true) }
 }
 
-unsafe fn cert_name(cert: *const CERT_CONTEXT, subject: bool) -> String {
+/// .NET-style subject (true) or issuer (false) string of a certificate context.
+///
+/// # Safety
+/// `cert` must be null or a valid CERT_CONTEXT pointer for the duration of the call.
+pub(crate) unsafe fn cert_name(cert: *const CERT_CONTEXT, subject: bool) -> String {
     // SAFETY: null-checked; the blob lives inside the certificate context.
     unsafe {
         if cert.is_null() || (*cert).pCertInfo.is_null() {
