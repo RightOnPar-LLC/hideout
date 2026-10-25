@@ -1,22 +1,29 @@
 //! The quick scan: everything set to start by itself, and the sideloading check on the
-//! programs that live in user-writable folders. A port of hideout.ps1.
+//! programs that live in user-writable folders. Grew out of a port of hideout.ps1.
 //!
-//! The JSON it produces has the same shape and field names as `hideout.ps1 -Json`, so
-//! the app, the report page and the guide read either one.
+//! The JSON keeps hideout.ps1's shape and field names (the app, the report page and
+//! the guide read either), and adds:
+//!   * `items`: every start-up item, its source, a verdict (threat / worth-a-look /
+//!     clean / could-not-check) and the facts behind it;
+//!   * `checked.bySource`, `checked.sourcesNotRead`.
 //!
-//! Where hideout.ps1 had a blind spot, this port does NOT copy it, and the parity
+//! Where hideout.ps1 had a blind spot, this engine does NOT copy it, and the parity
 //! harness lists each one as an explained difference:
 //!   * a Run value whose name starts with "PS" was skipped (it filtered PowerShell's own
 //!     PSPath/PSChildName properties with -like 'PS*');
-//!   * hidden files were skipped in the Startup folders and in a program's folder
-//!     (Get-ChildItem without -Force).
+//!   * hidden files were skipped in the Startup folders and in a program's folder;
+//!   * services whose WMI path comes back empty were skipped;
+//!   * it read four sources; this reads the whole start-up surface (autostart.rs);
+//!   * a data file next to a program that is really a program was not noticed.
 
+use crate::autostart::{self, Entry};
 use crate::rules::*;
-use hideout_win::authenticode::{self, SigStatus};
+use crate::{par, pe, sigcache};
+use hideout_win::authenticode::SigStatus;
 use hideout_win::registry::{Hive, Key};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 
@@ -26,6 +33,12 @@ pub struct Target {
     pub name: String,
     pub state: String,
     pub exe: String,
+    /// Where it was found (empty in hideout.ps1's own target files).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source: String,
+    /// "wider" for a place hideout.ps1 never looked (the parity harness uses this).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scope: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -62,6 +75,11 @@ pub struct Checked {
     pub in_user_folders: usize,
     pub by_kind: Map<String, Value>,
     pub could_not_check: Vec<Unchecked>,
+    #[serde(default)]
+    pub by_source: Map<String, Value>,
+    /// Places that could not be read at all (e.g. WMI subscriptions without admin).
+    #[serde(default)]
+    pub sources_not_read: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -71,6 +89,53 @@ pub struct Defender {
     pub signature_age_days: Value,
     pub last_quick_scan: String,
     pub last_full_scan: String,
+}
+
+/// What Hideout knows about one program on disk.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Facts {
+    pub exists: bool,
+    /// Where a bare program name ("powershell.exe") was found, the way Windows looks.
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub resolved: String,
+    /// Why the file could not be read, when it is there but closed to Hideout.
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub unreadable: String,
+    /// Valid, NotSigned, HashMismatch, ... (empty when the file is not there).
+    pub signature: String,
+    pub signer: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub sha256: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub created: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub modified: String,
+    /// "program", "library", "not a program" or "" (not looked at).
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub pe: String,
+    #[serde(skip_serializing_if = "is_zero", default)]
+    pub overlay_bytes: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+
+/// One start-up item with its verdict.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Item {
+    pub source: String,
+    pub kind: String,
+    pub location: String,
+    pub name: String,
+    pub state: String,
+    pub program: String,
+    /// threat, worth-a-look, clean, could-not-check
+    pub verdict: String,
+    pub reasons: Vec<Reason>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub facts: Option<Facts>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -84,91 +149,41 @@ pub struct QuickReport {
     pub checked: Checked,
     pub defender: Option<Defender>,
     pub findings: Vec<Finding>,
+    #[serde(default)]
+    pub items: Vec<Item>,
 }
 
 // ------------------------------------------------------------------ targets
 
-/// Where hideout.ps1 looked: scheduled tasks, Run/RunOnce keys, both Startup folders,
-/// services. Each failure to read a source is returned so it can be reported.
+/// The whole start-up surface, as scan targets (items that name a program) plus the
+/// raw entries and the places that could not be read.
+pub struct Gathered {
+    pub targets: Vec<Target>,
+    pub entries: Vec<Entry>,
+    pub not_read: Vec<String>,
+}
+
+pub fn gather() -> Gathered {
+    let s = autostart::gather();
+    let targets = s
+        .entries
+        .iter()
+        .filter_map(|e| e.program.as_ref().map(|p| Target {
+            kind: e.kind.clone(),
+            name: e.name.clone(),
+            state: e.state.clone(),
+            exe: p.clone(),
+            source: e.source.clone(),
+            scope: if e.ps_scope { String::new() } else { "wider".into() },
+        }))
+        .collect();
+    Gathered { targets, entries: s.entries, not_read: s.not_read }
+}
+
+/// Back-compat for callers that only want targets.
 pub fn gather_targets() -> (Vec<Target>, Vec<String>) {
-    let mut out = Vec::new();
-    let mut problems = Vec::new();
-    let mut add = |kind: &str, name: &str, state: &str, exe: Option<String>| {
-        if let Some(e) = exe.filter(|e| !e.is_empty()) {
-            out.push(Target { kind: kind.into(), name: name.into(), state: state.into(), exe: e });
-        }
-    };
-
-    match hideout_win::tasks::list() {
-        Ok(l) => {
-            for t in &l.tasks {
-                for a in &t.actions {
-                    if let hideout_win::tasks::Action::Exec { path, args } = a {
-                        let mut p = program_path(path);
-                        if p.as_deref().map(is_host).unwrap_or(false) {
-                            if let Some(inner) = target_from_args(args) {
-                                p = Some(inner);
-                            }
-                        }
-                        add("Scheduled task", &t.name, &t.state, p);
-                    }
-                }
-            }
-            for f in l.unreadable_folders {
-                problems.push(format!("scheduled tasks: {f}"));
-            }
-        }
-        Err(e) => problems.push(format!("scheduled tasks: {e}")),
-    }
-
-    let run_keys = [
-        (Hive::CurrentUser, "Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        (Hive::CurrentUser, "Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce"),
-        (Hive::LocalMachine, "Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        (Hive::LocalMachine, "Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce"),
-        (Hive::LocalMachine, "Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run"),
-    ];
-    for (hive, path) in run_keys {
-        let Some(k) = Key::open(hive, path) else { continue };
-        for (name, v) in k.values() {
-            let s = v.to_ps_string();
-            let mut p = program_path(&s);
-            if p.as_deref().map(is_host).unwrap_or(false) {
-                if let Some(inner) = target_from_args(&s) {
-                    p = Some(inner);
-                }
-            }
-            let shown = if name.is_empty() { "(default)".to_string() } else { name };
-            add("Startup (registry)", &shown, "Enabled", p);
-        }
-    }
-
-    for dir in [hideout_win::env::startup_folder(), hideout_win::env::common_startup_folder()].into_iter().flatten() {
-        let Ok(rd) = fs::read_dir(&dir) else { continue };
-        for e in rd.flatten() {
-            if !e.file_type().map(|t| t.is_file()).unwrap_or(false) {
-                continue;
-            }
-            let full = e.path().to_string_lossy().to_string();
-            let fname = e.file_name().to_string_lossy().to_string();
-            let p = if full.to_lowercase().ends_with(".lnk") {
-                hideout_win::links::read(&full).map(|s| s.target)
-            } else {
-                Some(full.clone())
-            };
-            add("Startup folder", &fname, "Enabled", p);
-        }
-    }
-
-    match hideout_win::services::list(hideout_win::services::Kind::Win32) {
-        Ok(v) => {
-            for s in v {
-                add("Service", &s.name, &s.state, program_path(&s.path));
-            }
-        }
-        Err(e) => problems.push(format!("services: {e}")),
-    }
-    (out, problems)
+    let g = gather();
+    (g.targets, g.not_read)
 }
 
 // ------------------------------------------------------------------ installed programs
@@ -188,9 +203,9 @@ impl Installed {
         let mut lines = Vec::new();
         let mut locations = Vec::new();
         let roots = [
-            (Hive::LocalMachine, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
-            (Hive::LocalMachine, "Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
-            (Hive::CurrentUser, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"),
+            (Hive::LocalMachine, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (Hive::LocalMachine, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (Hive::CurrentUser, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
         ];
         for (hive, path) in roots {
             let Some(k) = Key::open(hive, path) else { continue };
@@ -253,15 +268,13 @@ fn is_bin(name: &str) -> bool {
 /// Test-Folder: the sideloading check on one program's folder.
 pub fn check_folder(exe: &str, installed: &Installed) -> FolderVerdict {
     let dir = parent(exe);
-    let es = authenticode::check(Path::new(exe));
+    let es = sigcache::check(Path::new(exe));
     let signer = org_from_subject(&es.subject);
     let exe_signed = es.status == SigStatus::Valid;
     let exe_leaf = leaf(exe).to_string();
     let mut score = 0u32;
     let mut reasons = Vec::new();
 
-    let mut tampered: Vec<String> = Vec::new();
-    let mut unsigned: Vec<String> = Vec::new();
     let mut entries: Vec<(String, u64, bool)> = Vec::new(); // (name, size, is_file)
     if let Ok(rd) = fs::read_dir(&dir) {
         for e in rd.flatten() {
@@ -272,11 +285,15 @@ pub fn check_folder(exe: &str, installed: &Installed) -> FolderVerdict {
         }
     }
     let bins: Vec<&(String, u64, bool)> = entries.iter().filter(|(n, _, f)| *f && is_bin(n)).collect();
-    for (name, _, _) in &bins {
-        let p = Path::new(&dir).join(name);
-        match authenticode::check(&p).status {
-            SigStatus::HashMismatch => tampered.push(name.clone()),
-            SigStatus::NotSigned | SigStatus::UnknownError | SigStatus::NotSupportedFileFormat => unsigned.push(name.clone()),
+    // The slow part: every program file in the folder gets its signature checked. They
+    // are independent, so they run side by side; the order of the lists is kept.
+    let statuses = par::map(&bins, |(name, _, _)| sigcache::check(&Path::new(&dir).join(name)).status);
+    let mut tampered: Vec<String> = Vec::new();
+    let mut unsigned: Vec<String> = Vec::new();
+    for ((name, _, _), st) in bins.iter().zip(statuses) {
+        match st {
+            Some(SigStatus::HashMismatch) => tampered.push(name.clone()),
+            Some(SigStatus::NotSigned | SigStatus::UnknownError | SigStatus::NotSupportedFileFormat) => unsigned.push(name.clone()),
             _ => {}
         }
     }
@@ -310,6 +327,17 @@ pub fn check_folder(exe: &str, installed: &Installed) -> FolderVerdict {
             score += 1;
             reasons.push(Reason { tag: "Hidden payload".into(), text: format!("Large data files beside program code: {}", blobs.join(", ")) });
         }
+        // A "data" file that is really a Windows program: code hidden from anyone who
+        // only looks at file names.
+        let disguised: Vec<&str> = entries
+            .iter()
+            .filter(|(n, s, f)| *f && payload_ext(n) && *s >= 1024 && pe::read(&Path::new(&dir).join(n)).is_ok())
+            .map(|(n, _, _)| n.as_str())
+            .collect();
+        if !disguised.is_empty() {
+            score += 3;
+            reasons.push(Reason { tag: "Program dressed as media".into(), text: format!("These look like data files but are Windows programs: {}", disguised.join(", ")) });
+        }
     }
     let severity = match score {
         s if s >= 5 => "high",
@@ -324,6 +352,73 @@ pub fn check_folder(exe: &str, installed: &Installed) -> FolderVerdict {
         .map(|l| l.minutes())
         .unwrap_or_default();
     FolderVerdict { score, severity: severity.into(), signer, reasons, folder: dir, arrived }
+}
+
+// ------------------------------------------------------------------ facts
+
+fn local_time(t: std::io::Result<std::time::SystemTime>) -> String {
+    t.ok().and_then(hideout_win::time::local_from_system_time).map(|l| l.sortable()).unwrap_or_default()
+}
+
+/// Facts about one program. Hashes only programs in user-writable folders (the ones a
+/// person may need to look up), and only up to 64 MB.
+pub fn facts(program: &str) -> Facts {
+    let resolved = resolve_bare(program);
+    let path = resolved.clone().unwrap_or_else(|| program.to_string());
+    let p = Path::new(&path);
+    let meta = match fs::metadata(p) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Facts::default(),
+        // There, but closed to us (Store apps' WindowsApps folder, another user's files).
+        Err(e) => return Facts { exists: true, unreadable: e.to_string(), ..Default::default() },
+    };
+    if !meta.is_file() {
+        return Facts::default();
+    }
+    let sig = sigcache::check(p);
+    let mut f = Facts {
+        exists: true,
+        resolved: resolved.unwrap_or_default(),
+        signature: sig.status.as_str().into(),
+        signer: org_from_subject(&sig.subject),
+        created: local_time(meta.created()),
+        modified: local_time(meta.modified()),
+        ..Default::default()
+    };
+    match pe::read(p) {
+        Ok(info) => {
+            f.pe = if info.is_dll { "library" } else { "program" }.into();
+            f.overlay_bytes = info.overlay;
+        }
+        Err(pe::PeError::NotPe) => f.pe = "not a program".into(),
+        Err(_) => {}
+    }
+    if user_writable(&path) && meta.len() <= 64 * 1024 * 1024 {
+        f.sha256 = hideout_win::crypto::sha256_file_upper(p, 64 * 1024 * 1024).unwrap_or_default();
+    }
+    f
+}
+
+/// A bare program name ("powershell.exe", "explorer.exe") found the way Windows finds
+/// it when it starts a program: System32, the Windows folder, then each PATH folder.
+/// None when the name already has a folder, or is found nowhere.
+pub fn resolve_bare(program: &str) -> Option<String> {
+    if program.contains('\\') || program.contains('/') || program.is_empty() {
+        return None;
+    }
+    let windir = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
+    let mut dirs = vec![format!(r"{windir}\System32"), windir.clone()];
+    dirs.extend(std::env::var("PATH").unwrap_or_default().split(';').filter(|d| !d.trim().is_empty()).map(|d| d.trim().to_string()));
+    let names: Vec<String> = if program.contains('.') { vec![program.to_string()] } else { vec![format!("{program}.exe"), program.to_string()] };
+    for d in dirs {
+        for n in &names {
+            let c = Path::new(&d).join(n);
+            if c.is_file() {
+                return Some(c.to_string_lossy().to_string());
+            }
+        }
+    }
+    None
 }
 
 // ------------------------------------------------------------------ defender
@@ -356,17 +451,61 @@ pub fn defender_status() -> Option<Defender> {
 
 // ------------------------------------------------------------------ the scan
 
-/// Run the quick scan over `targets` (from the PC, or from a test file).
+fn verdict_of(severity: &str) -> &'static str {
+    match severity {
+        "high" => "threat",
+        "" => "clean",
+        _ => "worth-a-look",
+    }
+}
+
+/// Run the quick scan over `targets` only (a test file, or a caller that already has
+/// them). No `items` beyond the targets.
 pub fn scan(targets: &[Target], installed: &Installed) -> QuickReport {
+    scan_full(targets, &[], &[], installed, false)
+}
+
+/// The whole scan on this PC: the full surface, items with facts, findings.
+pub fn scan_pc() -> QuickReport {
+    let g = gather();
+    let installed = Installed::read();
+    scan_full(&g.targets, &g.entries, &g.not_read, &installed, true)
+}
+
+fn scan_full(targets: &[Target], entries: &[Entry], not_read: &[String], installed: &Installed, with_facts: bool) -> QuickReport {
+    sigcache::clear();
+    // Defender is a separate WMI round trip: ask it while the files are checked.
+    let defender = std::thread::spawn(|| {
+        hideout_win::com::init();
+        defender_status()
+    });
     let mut by_kind = Map::new();
+    let mut by_source = Map::new();
     for t in targets {
         let n = by_kind.get(&t.kind).and_then(|v| v.as_u64()).unwrap_or(0) + 1;
         by_kind.insert(t.kind.clone(), Value::from(n));
+        if !t.source.is_empty() {
+            let n = by_source.get(&t.source).and_then(|v| v.as_u64()).unwrap_or(0) + 1;
+            by_source.insert(t.source.clone(), Value::from(n));
+        }
     }
-    let mut cache: HashMap<String, Option<FolderVerdict>> = HashMap::new();
+    // Every user-writable program folder is checked once, all of them side by side.
+    let mut folders: Vec<(String, String)> = Vec::new();
+    for t in targets {
+        if !t.exe.is_empty() && user_writable(&t.exe) && program_ext(&t.exe) && !store_alias(&t.exe) && fs::metadata(&t.exe).is_ok() {
+            let key = parent(&t.exe).to_lowercase();
+            if !folders.iter().any(|(k, _)| *k == key) {
+                folders.push((key, t.exe.clone()));
+            }
+        }
+    }
+    let verdicts = par::map(&folders, |(_, exe)| check_folder(exe, installed));
+    let mut cache: HashMap<String, Option<FolderVerdict>> = folders.into_iter().map(|(k, _)| k).zip(verdicts).collect();
     let mut findings = Vec::new();
     let mut unchecked = Vec::new();
     let mut in_user = 0usize;
+    // (kind, name, program) -> (verdict, reasons) for the items list.
+    let mut item_verdicts: HashMap<(String, String, String), (String, Vec<Reason>)> = HashMap::new();
     for t in targets {
         if t.exe.is_empty() || !user_writable(&t.exe) || fs::metadata(&t.exe).is_err() {
             continue;
@@ -378,15 +517,15 @@ pub fn scan(targets: &[Target], installed: &Installed) -> QuickReport {
         }
         in_user += 1;
         let key = parent(&t.exe).to_lowercase();
-        let v = cache
-            .entry(key)
-            .or_insert_with(|| std::panic::catch_unwind(|| check_folder(&t.exe, installed)).ok())
-            .clone();
+        let v = cache.entry(key).or_insert_with(|| std::panic::catch_unwind(|| check_folder(&t.exe, installed)).ok()).clone();
+        let ikey = (t.kind.clone(), t.name.clone(), t.exe.to_lowercase());
         // A check that failed is reported, never counted as clean.
         let Some(f) = v else {
             unchecked.push(Unchecked { kind: t.kind.clone(), name: t.name.clone(), program: leaf(&t.exe).into() });
+            item_verdicts.insert(ikey, ("could-not-check".into(), vec![Reason { tag: "Check failed".into(), text: "Hideout could not finish checking this program's folder.".into() }]));
             continue;
         };
+        item_verdicts.insert(ikey, (verdict_of(&f.severity).into(), f.reasons.clone()));
         if f.severity.is_empty() {
             continue;
         }
@@ -403,17 +542,82 @@ pub fn scan(targets: &[Target], installed: &Installed) -> QuickReport {
             reasons: f.reasons,
         });
     }
+
+    // Items that are not programs on disk but are signs on their own.
+    for e in entries {
+        let (severity, tag, text) = match e.kind.as_str() {
+            "Browser extension (forced by policy)" => ("low", "Forced by policy", format!("A browser policy on this PC installs this extension and stops it being removed ({}).", e.name)),
+            "WMI event consumer (script)" => ("medium", "Script run by Windows", "Windows runs a script whenever a chosen event happens. Rare on home PCs; some malware hides here.".to_string()),
+            _ => continue,
+        };
+        let r = Reason { tag: tag.into(), text };
+        item_verdicts.insert((e.kind.clone(), e.name.clone(), String::new()), (verdict_of(severity).into(), vec![r.clone()]));
+        findings.push(Finding {
+            severity: severity.into(),
+            score: if severity == "medium" { 3 } else { 2 },
+            kind: e.kind.clone(),
+            name: e.name.clone(),
+            state: e.state.clone(),
+            program: String::new(),
+            folder: e.location.clone(),
+            signer: String::new(),
+            arrived: String::new(),
+            reasons: vec![r],
+        });
+    }
     findings.sort_by_key(|f| std::cmp::Reverse(f.score));
+
+    let items = if with_facts { build_items(entries, &item_verdicts) } else { Vec::new() };
     QuickReport {
         app: "Hideout".into(),
         version: 1,
         scanned_at: hideout_win::time::now_local().minutes(),
         computer: hideout_win::env::var("COMPUTERNAME"),
         admin: hideout_win::admin::is_elevated(),
-        checked: Checked { start_items: targets.len(), in_user_folders: in_user, by_kind, could_not_check: unchecked },
-        defender: defender_status(),
+        checked: Checked {
+            start_items: targets.len(),
+            in_user_folders: in_user,
+            by_kind,
+            could_not_check: unchecked,
+            by_source,
+            sources_not_read: not_read.to_vec(),
+        },
+        defender: defender.join().ok().flatten(),
         findings,
+        items,
     }
+}
+
+fn build_items(entries: &[Entry], verdicts: &HashMap<(String, String, String), (String, Vec<Reason>)>) -> Vec<Item> {
+    // Facts once per distinct program, in parallel.
+    let mut programs: BTreeMap<String, String> = BTreeMap::new();
+    for e in entries {
+        if let Some(p) = &e.program {
+            programs.entry(p.to_lowercase()).or_insert_with(|| p.clone());
+        }
+    }
+    let list: Vec<(String, String)> = programs.into_iter().collect();
+    let got = par::map(&list, |(_, p)| facts(p));
+    let facts_of: HashMap<String, Option<Facts>> = list.into_iter().map(|(k, _)| k).zip(got).collect();
+
+    entries
+        .iter()
+        .map(|e| {
+            let prog = e.program.clone().unwrap_or_default();
+            let f = e.program.as_ref().and_then(|p| facts_of.get(&p.to_lowercase()).cloned().flatten());
+            let (verdict, reasons) = match verdicts.get(&(e.kind.clone(), e.name.clone(), prog.to_lowercase())) {
+                Some((v, r)) => (v.clone(), r.clone()),
+                None => match &f {
+                    // The program could not be looked at: never "clean".
+                    None if e.program.is_some() => ("could-not-check".into(), vec![Reason { tag: "Not read".into(), text: "Hideout could not read this program's details.".into() }]),
+                    Some(f) if !f.unreadable.is_empty() => ("could-not-check".into(), vec![Reason { tag: "Not readable".into(), text: format!("Windows would not let Hideout open {prog} ({}).", f.unreadable) }]),
+                    Some(f) if !f.exists => ("could-not-check".into(), vec![Reason { tag: "Program missing".into(), text: format!("It points at {prog}, which is not there.") }]),
+                    _ => ("clean".into(), vec![]),
+                },
+            };
+            Item { source: e.source.clone(), kind: e.kind.clone(), location: e.location.clone(), name: e.name.clone(), state: e.state.clone(), program: prog, verdict, reasons, facts: f }
+        })
+        .collect()
 }
 
 /// Targets from a JSON file (hideout.ps1's -TestTargets format: one object or a list).
@@ -428,7 +632,64 @@ pub fn targets_from_json(text: &str) -> Result<Vec<Target>, String> {
     arr.into_iter()
         .map(|o| {
             let s = |k: &str| o.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
-            Ok(Target { kind: s("kind"), name: s("name"), state: s("state"), exe: s("exe") })
+            Ok(Target { kind: s("kind"), name: s("name"), state: s("state"), exe: s("exe"), source: s("source"), scope: s("scope") })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sys(p: &str) -> String {
+        format!(r"{}\{}", std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()), p)
+    }
+
+    #[test]
+    fn bare_names_resolve_like_windows() {
+        let c = resolve_bare("cmd.exe").expect("cmd.exe is in System32");
+        assert!(c.to_lowercase().ends_with(r"\system32\cmd.exe"), "{c}");
+        assert!(resolve_bare("cmd").is_some(), "the .exe can be left off");
+        assert!(resolve_bare(r"C:\a\b.exe").is_none(), "a path is not a bare name");
+        assert!(resolve_bare("definitely-not-a-program-hideout.exe").is_none());
+    }
+
+    #[test]
+    fn facts_of_real_missing_and_bare() {
+        let n = facts(&sys(r"System32\notepad.exe"));
+        assert!(n.exists && n.signature == "Valid" && n.pe == "program", "{n:?}");
+        assert!(n.sha256.is_empty(), "system programs are not hashed");
+        let m = facts(r"C:\no\such\thing.exe");
+        assert!(!m.exists && m.unreadable.is_empty());
+        let b = facts("explorer.exe");
+        assert!(b.exists && !b.resolved.is_empty(), "{b:?}");
+    }
+
+    #[test]
+    fn user_folder_programs_get_a_hash() {
+        let dir = std::env::temp_dir().join(format!("hideout-facts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("x.exe");
+        std::fs::copy(sys(r"System32\notepad.exe"), &p).unwrap();
+        let f = facts(&p.to_string_lossy());
+        assert_eq!(f.sha256.len(), 64, "{f:?}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn verdict_words() {
+        assert_eq!(verdict_of("high"), "threat");
+        assert_eq!(verdict_of("medium"), "worth-a-look");
+        assert_eq!(verdict_of("low"), "worth-a-look");
+        assert_eq!(verdict_of(""), "clean");
+    }
+
+    #[test]
+    fn whole_pc_scan_has_items_for_every_entry() {
+        let r = scan_pc();
+        assert!(r.items.len() >= r.checked.start_items, "every target is an item");
+        assert!(r.items.iter().all(|i| ["threat", "worth-a-look", "clean", "could-not-check"].contains(&i.verdict.as_str())));
+        // Not checked is never shown as clean.
+        assert!(r.items.iter().filter(|i| i.verdict == "clean" && !i.program.is_empty()).all(|i| i.facts.as_ref().map(|f| f.exists && f.unreadable.is_empty()).unwrap_or(false)));
+    }
 }

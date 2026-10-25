@@ -206,6 +206,25 @@ pub fn build(root: &Path, installed_text: &str) -> Result<Built, String> {
     targets.push(t("Scheduled task", "F9 hidden tampered dll", &d.join("App.exe")));
     expected.push(json!({"id": "F9-hidden-tampered", "folder": "HiddenKit", "program": "App.exe", "severity": "high", "tags": ["Tampered file"], "rustOnly": true}));
 
+    // F10 - a "voice recording" that is really a Windows program. hideout.ps1 only saw a
+    // large data file (one weak signal, no finding); the Rust engine reads its header.
+    let d = mk("CodecPack");
+    copy(&d.join("App.exe"))?;
+    // The program plus padding: still a program, and well over the 100 KB payload size.
+    let mut wav = std::fs::read(&signed).map_err(|e| e.to_string())?;
+    wav.extend(noise(200 * 1024, 51));
+    std::fs::write(d.join("voice.wav"), wav).map_err(|e| e.to_string())?;
+    targets.push(t("Scheduled task", "F10 program dressed as media", &d.join("App.exe")));
+    expected.push(json!({"id": "F10-program-dressed-as-media", "folder": "CodecPack", "program": "App.exe", "severity": "medium", "tags": ["Program dressed as media", "Hidden payload"], "psSeverity": ""}));
+
+    // F11 - a small renamed program (under the 100 KB payload size) still counts.
+    let d = mk("ToolBox");
+    copy(&d.join("App.exe"))?;
+    let small = std::fs::read(&signed).map_err(|e| e.to_string())?;
+    std::fs::write(d.join("skin.dat"), &small[..small.len().min(64 * 1024)]).map_err(|e| e.to_string())?;
+    targets.push(t("Scheduled task", "F11 small program as data", &d.join("App.exe")));
+    expected.push(json!({"id": "F11-small-program-as-data", "folder": "ToolBox", "program": "App.exe", "severity": "medium", "tags": ["Program dressed as media"], "notTags": ["Hidden payload"], "psSeverity": ""}));
+
     // Not a sideloading target: a Windows program outside user folders.
     let windir = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
     targets.push(json!({"kind": "Service", "name": "system program", "state": "Running", "exe": format!("{windir}\\System32\\svchost.exe")}));
@@ -231,7 +250,8 @@ pub fn check(report: &Value, expected: &[Value], engine: &str) -> Vec<String> {
             f["program"].as_str().map(|p| p.eq_ignore_ascii_case(program)).unwrap_or(false)
                 && f["folder"].as_str().map(|p| p.to_lowercase().ends_with(&format!("\\{}", folder.to_lowercase()))).unwrap_or(false)
         });
-        let want = e["severity"].as_str().unwrap_or("");
+        // Where hideout.ps1 is expected to answer differently (a check it never had).
+        let want = if engine == "ps" { e.get("psSeverity").and_then(|v| v.as_str()).or(e["severity"].as_str()).unwrap_or("") } else { e["severity"].as_str().unwrap_or("") };
         match (want, hit) {
             ("", None) => {}
             ("", Some(f)) => fails.push(format!("{engine} {id}: expected no finding, got {} {:?}", f["severity"], tags(f))),
