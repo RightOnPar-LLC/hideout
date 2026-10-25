@@ -1,0 +1,13 @@
+[package]
+name = "hideout-scan"
+description = "Hideout's scan: where malware hides on Windows. Read-only."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+hideout-win = { path = "../hideout-win" }
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true

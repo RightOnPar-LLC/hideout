@@ -1,0 +1,6 @@
+[package]
+name = "hideout-money"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
