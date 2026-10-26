@@ -139,3 +139,20 @@ footer a { color: var(--muted); }
 .guide-step[aria-pressed="true"] { background: var(--phos); color: var(--void); }
 .explain input { background: rgba(3,6,5,.75); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); padding: 6px 8px; width: min(320px, 90%); }
 #guide-letter { white-space: pre-wrap; border: 1px solid var(--line-hot); border-radius: 12px; padding: 12px 14px; background: rgba(3,6,5,.75); font-size: 13.5px; }
+
+/* The guide: a plain note instead of a chat, the urgent box, the deeper-check lists. */
+.guide-note h3 { margin: 0 0 8px; font: 700 15px var(--sans); color: var(--phos); }
+.guide-note p { margin: 0 0 12px; }
+.guide-note .status { color: var(--muted); font-size: 14px; }
+.urgent { margin-top: 18px; border: 1px solid rgba(255, 190, 61, .45); border-radius: 12px; padding: 14px 16px; background: var(--amber-soft); }
+.urgent h3 { color: var(--amber); }
+.urgent ol { margin: 0 0 12px; padding-left: 20px; display: grid; gap: 6px; }
+.explain select { background: rgba(3,6,5,.75); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); padding: 6px 8px; max-width: 90%; font: inherit; }
+.fine.inline { display: inline; margin: 0 0 0 8px; }
+.fine.example { margin: 0 0 12px; color: var(--muted); }
+fieldset.check { border: 1px solid var(--line); border-radius: 12px; margin: 0 0 12px; padding: 10px 14px 12px; }
+fieldset.check legend { padding: 0 6px; font-weight: 600; }
+.check-status { margin: 0 0 8px; }
+.check-item { display: block; margin: 0 0 6px; cursor: pointer; }
+.check-item input { width: auto; margin-right: 6px; accent-color: var(--phos); }
+.advice { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
